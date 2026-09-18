@@ -10,7 +10,12 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				// These two scan for pyenv/poetry/pipenv/conda — none of which are installed —
+				// and every failed probe throws a caught exception that halts the debugger.
+				// Python + Pylance stay enabled, so import fixes still work.
+				"--disable-extension=donjayamanne.python-environment-manager",
+				"--disable-extension=ms-python.vscode-python-envs"
 			],
 			"outFiles": [
 				"${workspaceFolder}/out/**/*.js"
