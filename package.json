@@ -1,6 +1,10 @@
 {
-	"name": "patterngen",
-	"displayName": "patterngen",
+	"name": "adra",
+	"displayName": "Adra",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/AT-LOW45/adra.git"
+	},
 	"description": "RAG based code completion to enforce org wide standards",
 	"version": "0.0.1",
 	"engines": {
@@ -18,7 +22,7 @@
 	"contributes": {
 		"configuration": {
 			"properties": {
-				"patterngen.ragEndpoint": {
+				"adra.ragEndpoint": {
 					"type": "string",
 					"default": "http://127.0.0.1:8000",
 					"description": "URL of the RAG server"
@@ -27,11 +31,11 @@
 		},
 		"commands": [
 			{
-				"command": "patterngen.generateCode",
+				"command": "adra.generateCode",
 				"title": "Generate Code"
 			},
 			{
-				"command": "patterngen.openKnowledgeBase",
+				"command": "adra.openKnowledgeBase",
 				"title": "Open Knowledge Base"
 			}
 		]

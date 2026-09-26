@@ -7,7 +7,7 @@
 			class="flex items-center h-[72px] border-b border-slate-200"
 			:class="collapsed ? 'justify-center px-2' : 'justify-between px-5'"
 		>
-			<h1 v-if="!collapsed" class="m-0 text-2xl font-semibold whitespace-nowrap">Patterngen</h1>
+			<h1 v-if="!collapsed" class="m-0 text-2xl font-semibold whitespace-nowrap">Adra</h1>
 			<button
 				class="flex items-center justify-center w-9 h-9 rounded-md text-slate-600 hover:bg-slate-200 transition-colors shrink-0 cursor-pointer"
 				:aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"

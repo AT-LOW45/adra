@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from exception.document_not_found_error import DocumentNotFoundError
 
-# The .env lives at the repo root (…/patterngen/.env), two levels up from this file
+# The .env lives at the repo root, two levels up from this file
 # (rag/storage/blob_storage.py). Load it explicitly so blob creds are available
 # regardless of import order or which entrypoint is running.
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -17,6 +17,8 @@ client = boto3.client(
     region_name="us-east-1",
 )
 
+# Kept as "patterngen-docs" through the rename to Adra: renaming the bucket makes the
+# raw ADR markdown already stored in it unreachable.
 BUCKET = os.getenv("BLOB_BUCKET", "patterngen-docs")
 
 # Drafts are stored as opaque JSON strings under `drafts/<id>.json`, separate from

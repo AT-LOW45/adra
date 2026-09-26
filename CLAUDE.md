@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Patterngen is a VS Code extension that generates boilerplate grounded in a team's **Architecture Decision Records (ADRs)**. A RAG backend retrieves whole relevant ADRs and instructs an LLM to follow them, so generated code matches documented org conventions instead of being generic.
+Adra is a VS Code extension that generates boilerplate grounded in a team's **Architecture Decision Records (ADRs)**. A RAG backend retrieves whole relevant ADRs and instructs an LLM to follow them, so generated code matches documented org conventions instead of being generic.
 
 Read `README.md` for the product-level overview and retrieval design; this file covers the operational/architectural details needed to work in the code.
 
@@ -22,7 +22,7 @@ Branching model is GitHub Flow — `main` is protected and changes land via PR (
 | `rag/` | Python 3.13 · FastAPI · LangChain · ChromaDB   | Backend: indexes ADRs, retrieves context, generates code.       |
 | `ui/`  | Vue 3 · Vite · PrimeVue · Tailwind · TypeScript | Knowledge-base manager (upload/edit/delete ADRs).               |
 
-`ui/` builds to `ui/dist`, which `rag/server.py` mounts at `/` via `StaticFiles`. So the backend and the KB UI are served from **one origin** (`:8000`) in production; the extension's `patterngen.ragEndpoint` setting points at that same origin.
+`ui/` builds to `ui/dist`, which `rag/server.py` mounts at `/` via `StaticFiles`. So the backend and the KB UI are served from **one origin** (`:8000`) in production; the extension's `adra.ragEndpoint` setting points at that same origin.
 
 ## Commands
 
@@ -68,7 +68,7 @@ Layering mirrors the backend: `commands → service → config`. `extension.ts` 
 
 - **`generate-boilerplate`**: capture the active editor *before* showing dialogs, prompt for intent, send `{query, language (editor.document.languageId), selection_context}` to `POST /boilerplate/generate-boilerplate`, insert the result at the cursor.
 - **`wrap-in-try-catch`** is purely local text manipulation (no backend) — it re-indents the selection and wraps it.
-- **`api-config.ts`** builds the axios client from the `patterngen.ragEndpoint` VS Code setting. The backend response shape is `{ code }` / `{ data, error }` style — match it when adding endpoints.
+- **`api-config.ts`** builds the axios client from the `adra.ragEndpoint` VS Code setting. The backend response shape is `{ code }` / `{ data, error }` style — match it when adding endpoints.
 
 ## UI architecture (`ui/`)
 
@@ -82,4 +82,4 @@ Vue 3 `<script setup>`, vue-router, PrimeVue components, Tailwind v4 (via `@tail
 - `src/rag/` contains only a stray `.venv` + `uv.lock` (a misplaced virtualenv) — **the real backend is `rag/`**. Don't edit or reference `src/rag/`.
 - The extension talks to the backend over HTTP; there's no shared type contract. When you change a request/response shape, update **both** the Python `schema/boilerplate_schema.py` (Pydantic) and the TS caller.
 - CORS in `server.py` only allows `:5173`/`:5174` (Vite dev). Production is same-origin, so no CORS needed there.
-- Roadmap and tasks live in **GitHub Issues** (`AT-LOW45/patterngen`); `CHANGELOG.md` holds user-facing release notes. (There was a `DEVLOG.md` engineering journal — retired in favour of Issues + git history; recover from git history if needed.)
+- Roadmap and tasks live in **GitHub Issues** (`AT-LOW45/adra`); `CHANGELOG.md` holds user-facing release notes. (There was a `DEVLOG.md` engineering journal — retired in favour of Issues + git history; recover from git history if needed.)

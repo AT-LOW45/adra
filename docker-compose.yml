@@ -1,4 +1,4 @@
-# Local MinIO (S3-compatible) blob storage for patterngen.
+# Local MinIO (S3-compatible) blob storage for adra.
 # Credentials and bucket name are read from the repo-root .env (not hardcoded),
 # so no secrets live in this committed file:
 #   BLOB_ACCESS_KEY  -> MinIO root user
@@ -16,7 +16,7 @@
 services:
   minio:
     image: minio/minio:latest
-    container_name: patterngen-minio
+    container_name: adra-minio
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"

@@ -15,6 +15,9 @@ CHROMA_DB_PATH = str(_RAG_DIR / "chroma_db")
 # .as_posix() (forward slashes) rather than str() — SQLAlchemy's sqlite URL scheme
 # breaks on Windows-style backslashes in the path.
 RECORD_MANAGER_DB = f"sqlite:///{(_RAG_DIR / 'record_manager.db').as_posix()}"
+# Kept as "patterngen" through the rename to Adra: this is the record-manager key for
+# incremental indexing. Changing it orphans every already-indexed document, so a
+# re-upload would duplicate chunks instead of replacing them.
 NAMESPACE = "chroma/patterngen"
 
 # bge-base-en-v1.5 is a stronger, code/architecture-aware retrieval model than

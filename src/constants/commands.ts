@@ -1,9 +1,9 @@
 const COMMANDS = {
 	generateCode: {
-		id: "patterngen.generateCode",
+		id: "adra.generateCode",
 	},
 	openKnowledgeBase: {
-		id: "patterngen.openKnowledgeBase"
+		id: "adra.openKnowledgeBase"
 	}
 } as const;
 

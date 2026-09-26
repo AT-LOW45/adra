@@ -14,17 +14,17 @@ let probe: Promise<void> | null = null;
  * record the outcome in `status`. Call once on activation; command guards read `status`.
  */
 export const startLivelinessCheck = () => {
-	console.log(`[patterngen] liveliness check started at ${new Date().toISOString()}`);
+	console.log(`[adra] liveliness check started at ${new Date().toISOString()}`);
 	status = "checking";
 	probe = systemService
 		.checkLiveliness()
 		.then(() => {
 			status = "up";
-			console.log(`[patterngen] liveliness check resolved UP at ${new Date().toISOString()}`);
+			console.log(`[adra] liveliness check resolved UP at ${new Date().toISOString()}`);
 		})
 		.catch(() => {
 			status = "down";
-			console.log(`[patterngen] liveliness check resolved DOWN at ${new Date().toISOString()}`);
+			console.log(`[adra] liveliness check resolved DOWN at ${new Date().toISOString()}`);
 		});
 };
 
@@ -36,11 +36,11 @@ export const startLivelinessCheck = () => {
 const ensureBackendReady = async () => {
 	// still in flight — tell the user, wait for it to settle, then re-check below
 	if (status === "checking") {
-		vscode.window.showInformationMessage("Patterngen is still checking the backend - one moment...");
+		vscode.window.showInformationMessage("Adra is still checking the backend - one moment...");
 		await probe;
 	}
 	if (status === "down") {
-		vscode.window.showWarningMessage("Patterngen backend is not reachable now. Please check the configuration");
+		vscode.window.showWarningMessage("Adra backend is not reachable now. Please check the configuration");
 		return false;
 	}
 	return true;

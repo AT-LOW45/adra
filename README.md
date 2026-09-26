@@ -1,10 +1,10 @@
-# Patterngen
+# Adra
 
 **RAG-based code generation and editing that enforces your team's architectural decisions.**
 
-Patterngen is a VS Code extension that generates and edits code grounded in your own **Architecture Decision Records (ADRs)**. Instead of producing generic code, it retrieves the ADRs relevant to what you're building and instructs the LLM to follow them — so the code matches your team's conventions for error handling, data fetching, response shapes, and whatever else you've documented.
+Adra is a VS Code extension that generates and edits code grounded in your own **Architecture Decision Records (ADRs)**. Instead of producing generic code, it retrieves the ADRs relevant to what you're building and instructs the LLM to follow them — so the code matches your team's conventions for error handling, data fetching, response shapes, and whatever else you've documented.
 
-Given a natural-language instruction, Patterngen reads the file you're working in, works out *what* to change and *where*, and applies precise edits in place — following your ADRs and resolving imports for you.
+Given a natural-language instruction, Adra reads the file you're working in, works out *what* to change and *where*, and applies precise edits in place — following your ADRs and resolving imports for you.
 
 ## How it works
 
@@ -24,7 +24,7 @@ VS Code applies the edits in place ──► editor auto-adds the imports
 
 Two ideas make this work:
 
-- **Whole-ADR retrieval.** Rather than returning scattered chunks, Patterngen identifies which *whole ADRs* are relevant to your request and feeds them to the LLM in full — so the concrete code examples in an ADR are never dropped. Irrelevant requests retrieve nothing, so the model just generates normally instead of being misled.
+- **Whole-ADR retrieval.** Rather than returning scattered chunks, Adra identifies which *whole ADRs* are relevant to your request and feeds them to the LLM in full — so the concrete code examples in an ADR are never dropped. Irrelevant requests retrieve nothing, so the model just generates normally instead of being misled.
 - **File-aware edits.** The model doesn't emit a blob to paste at your cursor. It returns a set of `{search, replace}` edits; the extension locates each `search` in your file — tolerant of whitespace and trivial formatting differences — and applies the replacement in place. So a single instruction can span multiple regions (a function *and* its callers), and a rename updates every occurrence. Imports are deliberately left out of the model's output and resolved afterward by the editor's language server, so they always point at the correct paths.
 
 ## Project structure
@@ -43,7 +43,7 @@ The Vue app is built to `ui/dist` and served by FastAPI at `/`, so the backend a
 
 The documentation site is built with VitePress from `docs-site/` and deployed to **GitHub Pages** on every change (see [`.github/workflows/deploy-docs.yml`](.github/workflows/deploy-docs.yml)):
 
-**https://at-low45.github.io/patterngen/**
+**https://at-low45.github.io/adra/**
 
 ## Prerequisites
 
@@ -65,7 +65,7 @@ API_ENDPOINT=http://localhost:8000
 BLOB_ENDPOINT=http://localhost:9000
 BLOB_ACCESS_KEY=...
 BLOB_SECRET_KEY=...
-BLOB_BUCKET=patterngen-docs
+BLOB_BUCKET=adra-docs
 ```
 
 > The `BLOB_*` values are also consumed by the bundled MinIO setup (step 2): `BLOB_ACCESS_KEY`/`BLOB_SECRET_KEY` become MinIO's root credentials and `BLOB_BUCKET` is the bucket it creates. Use `http://localhost:9000` for `BLOB_ENDPOINT` when running MinIO locally. If you point at a managed S3-compatible store instead, set these to that store's values and skip step 2. Note: MinIO requires the access key to be **≥ 3 characters** and the secret key **≥ 8 characters**, or the container won't start.
@@ -111,14 +111,14 @@ The knowledge-base UI is now available at `http://localhost:8000`.
 
 ### 5. Run the extension
 
-Open the repo in VS Code and press **F5** to launch an Extension Development Host with Patterngen loaded.
+Open the repo in VS Code and press **F5** to launch an Extension Development Host with Adra loaded.
 
 ## Usage
 
 | Command | What it does |
 |---------|--------------|
-| **Patterngen: Generate Code** | Prompts for an instruction, sends the active file and its language to the backend, and applies the returned ADR-grounded edits **in place** — resolving imports automatically. If you have code selected, that selection is used as the focus for the change. |
-| **Patterngen: Open Knowledge Base** | Opens the knowledge-base UI (the `ragEndpoint`) in your browser to manage ADRs. |
+| **Adra: Generate Code** | Prompts for an instruction, sends the active file and its language to the backend, and applies the returned ADR-grounded edits **in place** — resolving imports automatically. If you have code selected, that selection is used as the focus for the change. |
+| **Adra: Open Knowledge Base** | Opens the knowledge-base UI (the `ragEndpoint`) in your browser to manage ADRs. |
 
 On activation the extension checks that the backend is reachable and warns if it isn't, so backend-dependent commands fail gracefully rather than silently.
 
@@ -130,7 +130,7 @@ Use the knowledge base UI to upload markdown ADRs, edit them in-place, and delet
 
 This extension contributes the following setting:
 
-- `patterngen.ragEndpoint` — URL of the RAG backend. Default: `http://127.0.0.1:8000`.
+- `adra.ragEndpoint` — URL of the RAG backend. Default: `http://127.0.0.1:8000`.
 
 ## Retrieval details
 
@@ -151,5 +151,5 @@ This extension contributes the following setting:
 
 - **Contributing guide:** [CONTRIBUTING.md](CONTRIBUTING.md) — branching model, branch naming, and PR conventions.
 - **CI:** GitHub Actions runs compile/lint (extension), build (UI), Pyright (backend), and the docs build on every pull request, plus CodeQL/Dependabot/secret scanning. `main` is protected — changes land via pull request.
-- **Roadmap & tasks:** [GitHub Issues](https://github.com/AT-LOW45/patterngen/issues)
+- **Roadmap & tasks:** [GitHub Issues](https://github.com/AT-LOW45/adra/issues)
 - [CHANGELOG.md](CHANGELOG.md) — user-facing release notes
