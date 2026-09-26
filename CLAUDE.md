@@ -18,7 +18,7 @@ Branching model is GitHub Flow — `main` is protected and changes land via PR (
 
 | Path   | Stack                                          | Role                                                            |
 |--------|------------------------------------------------|-----------------------------------------------------------------|
-| `src/` | TypeScript · VS Code API                       | The extension. Registers commands, calls the backend over HTTP. |
+| `extension/` | TypeScript · VS Code API                       | The extension. Registers commands, calls the backend over HTTP. |
 | `rag/` | Python 3.13 · FastAPI · LangChain · ChromaDB   | Backend: indexes ADRs, retrieves context, generates code.       |
 | `ui/`  | Vue 3 · Vite · PrimeVue · Tailwind · TypeScript | Knowledge-base manager (upload/edit/delete ADRs).               |
 
@@ -26,7 +26,7 @@ Branching model is GitHub Flow — `main` is protected and changes land via PR (
 
 ## Commands
 
-**Extension (`src/`, repo root):**
+**Extension (`extension/`, repo root):**
 ```bash
 npm run compile      # tsc -p ./  → out/
 npm run lint         # eslint src
@@ -62,7 +62,7 @@ Layering is `router → service → db/storage`. Entry point is `server.py` (the
 - **`storage/blob_storage.py`** persists raw ADR markdown to S3-compatible blob storage (boto3). The vector store holds chunks for retrieval; the blob holds the canonical original for editing. Deletes must hit both (see `knowledge_base.py` delete endpoints).
 - **LLM** is Groq `llama-3.3-70b-versatile` (`config/llm_config.py`), temperature 0, instantiated at import — a missing `GROQ_API_KEY` fails fast at startup.
 
-## Extension architecture (`src/`)
+## Extension architecture (`extension/`)
 
 Layering mirrors the backend: `commands → service → config`. `extension.ts` registers three commands from `constants/commands.ts`; each command file is a default-exported handler.
 
@@ -79,7 +79,6 @@ Vue 3 `<script setup>`, vue-router, PrimeVue components, Tailwind v4 (via `@tail
 
 ## Gotchas
 
-- `src/rag/` contains only a stray `.venv` + `uv.lock` (a misplaced virtualenv) — **the real backend is `rag/`**. Don't edit or reference `src/rag/`.
 - The extension talks to the backend over HTTP; there's no shared type contract. When you change a request/response shape, update **both** the Python `schema/boilerplate_schema.py` (Pydantic) and the TS caller.
 - CORS in `server.py` only allows `:5173`/`:5174` (Vite dev). Production is same-origin, so no CORS needed there.
 - Roadmap and tasks live in **GitHub Issues** (`AT-LOW45/adra`); `CHANGELOG.md` holds user-facing release notes. (There was a `DEVLOG.md` engineering journal — retired in favour of Issues + git history; recover from git history if needed.)

@@ -31,7 +31,7 @@ Two ideas make this work:
 
 | Path | Stack | Role |
 |------|-------|------|
-| `src/` | TypeScript · VS Code API | The extension itself |
+| `extension/` | TypeScript · VS Code API | The extension itself |
 | `rag/` | Python · FastAPI · LangChain · ChromaDB | Backend: indexes ADRs, retrieves context, generates edits |
 | `ui/` | Vue 3 · Vite · PrimeVue · TypeScript | Knowledge-base manager: upload, edit, delete ADRs |
 | `docs-site/` | VitePress | Documentation site (deployed to GitHub Pages) |

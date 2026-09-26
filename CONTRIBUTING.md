@@ -64,7 +64,7 @@ fix: strip stray control character in edit.service.ts
 Adra has three components — run the checks for whatever you touched. Full
 commands are in [`CLAUDE.md`](CLAUDE.md).
 
-- **Extension (`src/`, repo root):** `npm run compile` · `npm run lint` · `npm test`
+- **Extension (`extension/`, repo root):** `npm run compile` · `npm run lint` · `npm test`
 - **Backend (`rag/`):** run with `uv`; type-check with Pyright (`pyproject.toml`)
 - **KB UI (`ui/`):** `npm run build` (runs `vue-tsc`)
 
