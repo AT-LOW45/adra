@@ -49,23 +49,44 @@ The documentation site is built with VitePress from `docs-site/` and deployed to
 
 - **Python ≥ 3.13** and [`uv`](https://docs.astral.sh/uv/)
 - **Node.js** (for the Vue knowledge-base UI, and the docs site)
-- An **LLM API key** — Groq is the current default (`openai/gpt-oss-120b`); the model and provider are configurable (see [llm_config.py](rag/config/llm_config.py))
+- An **LLM API key**. Any OpenAI-compatible provider works — Groq (the default), OpenAI, OpenRouter, Together, DeepSeek — as does a local runtime such as [Ollama](https://ollama.com) or LM Studio, which keeps your ADRs off third-party infrastructure.
+
+  > **The model must support tool calling / structured output.** Both the ADR quality review and code generation ask the model for a structured response rather than free text. A model without that support fails at call time, not at startup — and small local models often lack it.
 - An **S3-compatible blob store** (for persisting raw ADR content) — for local development, use the bundled [MinIO](https://min.io/) setup, which only requires **Docker** (see step 2)
 
 ## Setup
 
 ### 1. Configure environment
 
-Create a `.env` at the repo root (the `GROQ_API_KEY` below reflects the current default LLM provider — adjust if you configure a different one):
+Create a `.env` at the repo root:
 
 ```env
-GROQ_API_KEY=your_groq_key
-# GROQ_MODEL=openai/gpt-oss-120b   # optional — override the default model
+LLM_API_KEY=your_api_key
+# LLM_BASE_URL=https://api.groq.com/openai/v1   # optional — defaults to Groq
+# LLM_MODEL=openai/gpt-oss-120b                 # optional — default model
 API_ENDPOINT=http://localhost:8000
 BLOB_ENDPOINT=http://localhost:9000
 BLOB_ACCESS_KEY=...
 BLOB_SECRET_KEY=...
 BLOB_BUCKET=adra-docs
+```
+
+> `GROQ_API_KEY` and `GROQ_MODEL` are still read as fallbacks, so an existing `.env` keeps working.
+
+**Using a different provider** — set the base URL and model; the key is whatever that provider issues:
+
+```env
+# OpenAI
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o
+
+# OpenRouter (proxies Anthropic, Gemini and others)
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_MODEL=anthropic/claude-sonnet-4
+
+# Local Ollama — nothing leaves your machine
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=llama3.1
 ```
 
 > The `BLOB_*` values are also consumed by the bundled MinIO setup (step 2): `BLOB_ACCESS_KEY`/`BLOB_SECRET_KEY` become MinIO's root credentials and `BLOB_BUCKET` is the bucket it creates. Use `http://localhost:9000` for `BLOB_ENDPOINT` when running MinIO locally. If you point at a managed S3-compatible store instead, set these to that store's values and skip step 2. Note: MinIO requires the access key to be **≥ 3 characters** and the secret key **≥ 8 characters**, or the container won't start.
