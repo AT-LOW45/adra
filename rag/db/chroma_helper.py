@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from langchain_chroma.vectorstores import Chroma
@@ -11,10 +12,16 @@ from langchain_classic.indexes import SQLRecordManager
 # resolves against the process's cwd, so running a script from rag/scripts instead of
 # rag/ would silently open (or create) a second, empty store. See rekey_sources.py.
 _RAG_DIR = Path(__file__).resolve().parent.parent
-CHROMA_DB_PATH = str(_RAG_DIR / "chroma_db")
+
+# Both are overridable so a container can point them at a mounted volume. Without that
+# the vector store lives inside the container's own filesystem and is lost whenever the
+# container is replaced — an image upgrade, or `compose down` then `up`. The defaults are
+# the previous values, so a local run is unchanged.
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", str(_RAG_DIR / "chroma_db"))
+_RECORD_MANAGER_FILE = Path(os.getenv("RECORD_MANAGER_PATH", str(_RAG_DIR / "record_manager.db")))
 # .as_posix() (forward slashes) rather than str() — SQLAlchemy's sqlite URL scheme
 # breaks on Windows-style backslashes in the path.
-RECORD_MANAGER_DB = f"sqlite:///{(_RAG_DIR / 'record_manager.db').as_posix()}"
+RECORD_MANAGER_DB = f"sqlite:///{_RECORD_MANAGER_FILE.as_posix()}"
 # Kept as "patterngen" through the rename to Adra: this is the record-manager key for
 # incremental indexing. Changing it orphans every already-indexed document, so a
 # re-upload would duplicate chunks instead of replacing them.
