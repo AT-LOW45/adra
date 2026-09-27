@@ -1,6 +1,8 @@
 {
 	"name": "adra",
 	"displayName": "Adra",
+	"publisher": "at-low45",
+	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/AT-LOW45/adra.git"
@@ -15,9 +17,7 @@
 		"Programming Languages",
 		"Snippets"
 	],
-	"activationEvents": [
-		"*"
-	],
+	"activationEvents": [],
 	"main": "./out/main.js",
 	"contributes": {
 		"configuration": {
@@ -53,6 +53,7 @@
 		"@types/vscode": "^1.120.0",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
+		"@vscode/vsce": "^4.0.0",
 		"eslint": "^9.39.3",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.56.1"

@@ -1,11 +1,40 @@
+# What ships in the .vsix: package.json, README, CHANGELOG, LICENSE, the compiled
+# JS in out/, and the production node_modules (vsce prunes devDependencies itself).
+# Everything below is excluded. NOTE: vsce does NOT read .gitignore, so anything
+# secret must be listed here explicitly.
+
+# Secrets and local config — never publish these
+.env
+.env.*
+.mcp.json
+
+# Sources and build tooling (the extension ships compiled JS only)
+extension/**
+out/test/**
+**/*.ts
+**/*.map
+**/tsconfig.json
+tsconfig.tsbuildinfo
+**/eslint.config.mjs
+.prettierrc
 .vscode/**
 .vscode-test/**
-extension/**
+.vscode-test.mjs
+
+# The other components live in the same repo but are not part of the extension —
+# it talks to the backend over HTTP and never bundles it.
+rag/**
+ui/**
+docs/**
+docs-site/**
+docker-compose.yml
+
+# Repo meta
+.github/**
 .gitignore
+.gitattributes
 .yarnrc
+**/.DS_Store
+CLAUDE.md
+CONTRIBUTING.md
 vsc-extension-quickstart.md
-**/tsconfig.json
-**/eslint.config.mjs
-**/*.map
-**/*.ts
-**/.vscode-test.*
