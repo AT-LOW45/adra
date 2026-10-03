@@ -1,0 +1,28 @@
+# The build context should carry only what the image actually needs. Docker does not
+# read .gitignore, so anything secret or heavy has to be listed here explicitly.
+
+# Secrets — never in the build context.
+.env
+.env.*
+.mcp.json
+
+# Heavy, and rebuilt inside the image anyway.
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+ui/dist
+
+# Local state. The container keeps its own under /data.
+rag/chroma_db
+rag/record_manager.db
+
+# Not part of the backend or the UI build.
+extension/
+out/
+docs/
+docs-site/
+.github/
+.vscode/
+.git
+*.vsix
