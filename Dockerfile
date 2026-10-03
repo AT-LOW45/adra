@@ -36,13 +36,34 @@ ENV HOST=0.0.0.0 \
     PORT=8000 \
     RELOAD=false
 
-# Everything stateful lives under /data so a single volume covers it.
-# The embedding model (~400 MB) is deliberately not baked into the image; it downloads
-# on first use. Pointing the HuggingFace cache at /data means that happens once rather
-# than every time the container is replaced.
+# The embedding model is baked in rather than fetched on first run. It is ~420 MB
+# against an image that is already 5.4 GB, so the saving was never meaningful, while a
+# runtime download meant every first start could fail — and it did: an interrupted fetch
+# leaves a partial snapshot and surfaces as "Unrecognized processing class", which gives
+# no hint of the real cause. Baking it also makes the image work with no outbound network
+# at all, which matters for teams keeping their architecture decisions off the internet.
+#
+# It lives outside /data deliberately: the model is immutable and belongs to the image,
+# whereas /data is the operator's volume. Keeping them apart avoids relying on Docker's
+# copy-into-empty-volume behaviour.
+ENV HF_HOME=/opt/huggingface
+# Warmed by importing the module the app itself uses, so the cache holds exactly what it
+# loads at runtime, at the revision pinned in chroma_helper.py. The data paths are sent
+# to /tmp for this one step so the build does not write into the volume mountpoint.
+RUN CHROMA_DB_PATH=/tmp/warm RECORD_MANAGER_PATH=/tmp/warm.db \
+    .venv/bin/python -c "import db.chroma_helper" \
+ && rm -rf /tmp/warm /tmp/warm.db
+
+# Set AFTER the warm-up above, which needs the network. From here on the hub libraries
+# must work from the baked cache alone: by default they still contact HuggingFace to
+# revalidate even when a model is cached, which would reintroduce the runtime network
+# dependency the baking was meant to remove — and make the image unusable offline.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+# Stateful data lives under /data so a single volume covers it.
 ENV CHROMA_DB_PATH=/data/chroma \
-    RECORD_MANAGER_PATH=/data/record_manager.db \
-    HF_HOME=/data/huggingface
+    RECORD_MANAGER_PATH=/data/record_manager.db
 RUN mkdir -p /data
 VOLUME /data
 

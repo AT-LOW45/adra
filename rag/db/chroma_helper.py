@@ -33,8 +33,15 @@ NAMESPACE = "chroma/patterngen"
 # Note: 768-dim — changing this model requires rebuilding the Chroma collection.
 BGE_QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 
+EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
+# Pinned: without a revision this follows the repo's main branch, so an upstream change
+# could alter what gets downloaded with no change on our side. The Dockerfile bakes this
+# exact revision into the image.
+EMBEDDING_REVISION = "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+
 embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-base-en-v1.5",
+    model_name=EMBEDDING_MODEL,
+    model_kwargs={"revision": EMBEDDING_REVISION},
     encode_kwargs={"normalize_embeddings": True},
     query_encode_kwargs={
         "normalize_embeddings": True,
