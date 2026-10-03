@@ -1,5 +1,7 @@
 import os
+import time
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from pathlib import Path
 from dotenv import load_dotenv
 from exception.document_not_found_error import DocumentNotFoundError
@@ -9,6 +11,28 @@ from exception.document_not_found_error import DocumentNotFoundError
 # regardless of import order or which entrypoint is running.
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
+# Kept as "patterngen-docs" through the rename to Adra: renaming the bucket makes the
+# raw ADR markdown already stored in it unreachable.
+BUCKET = os.getenv("BLOB_BUCKET", "patterngen-docs")
+
+# Checked at import, matching how a missing LLM_API_KEY fails. Left unvalidated, the app
+# starts happily, serves the UI, and reports an empty knowledge base — which reads as "no
+# ADRs yet" rather than "storage was never configured". The truth only appears when the
+# first blob call 500s, and in a browser that surfaces as a misleading CORS error.
+_REQUIRED = {
+    "BLOB_ENDPOINT": os.getenv("BLOB_ENDPOINT"),
+    "BLOB_ACCESS_KEY": os.getenv("BLOB_ACCESS_KEY"),
+    "BLOB_SECRET_KEY": os.getenv("BLOB_SECRET_KEY"),
+}
+_missing = [name for name, value in _REQUIRED.items() if not value]
+if _missing:
+    raise ValueError(
+        "Blob storage is not configured: "
+        + ", ".join(_missing)
+        + f" not set. Adra stores every ADR in an S3-compatible bucket (currently "
+        f"'{BUCKET}'); see the README for setting one up."
+    )
+
 client = boto3.client(
     "s3",
     endpoint_url=os.getenv("BLOB_ENDPOINT"),
@@ -17,9 +41,28 @@ client = boto3.client(
     region_name="us-east-1",
 )
 
-# Kept as "patterngen-docs" through the rename to Adra: renaming the bucket makes the
-# raw ADR markdown already stored in it unreachable.
-BUCKET = os.getenv("BLOB_BUCKET", "patterngen-docs")
+
+def _verify_bucket_reachable(attempts: int = 5, delay: float = 2.0) -> None:
+    """Fail at startup if the bucket can't be reached, rather than on the first request.
+
+    Retried because compose starts the app and MinIO together, so a few seconds of
+    "connection refused" at boot is normal rather than a real misconfiguration.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            client.head_bucket(Bucket=BUCKET)
+            return
+        except (BotoCoreError, ClientError) as error:
+            if attempt == attempts:
+                raise ValueError(
+                    f"Blob storage unreachable at {os.getenv('BLOB_ENDPOINT')} "
+                    f"(bucket '{BUCKET}') after {attempts} attempts: {error}. "
+                    "Check the service is running and the bucket exists."
+                ) from error
+            time.sleep(delay)
+
+
+_verify_bucket_reachable()
 
 # Drafts are stored as opaque JSON strings under `drafts/<id>.json`, separate from
 # the published (markdown) ADRs and never indexed. Each draft holds one version —

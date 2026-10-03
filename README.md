@@ -109,7 +109,9 @@ docker compose down       # stop (data is preserved)
 docker compose down -v    # stop and delete all stored objects
 ```
 
-Skip this step if you're using a managed S3-compatible store; just point the `BLOB_*` values in `.env` at it.
+Skip this step if you're using a managed S3-compatible store; just point the `BLOB_*` values in `.env` at it — **the bucket must already exist**, as Adra checks it is reachable but never creates it. (The MinIO setup above creates it for you; on S3, R2 or similar you create it yourself.)
+
+> Blob storage is required, not optional — every ADR is stored there. The backend refuses to start if the `BLOB_*` values are missing, or if the bucket can't be reached, and says which. That is deliberate: left unchecked it would start, serve the UI and show an empty knowledge base, which reads as "no ADRs yet" rather than "storage was never set up".
 
 ### 3. Build the knowledge-base UI
 
