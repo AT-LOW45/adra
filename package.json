@@ -8,7 +8,7 @@
 		"url": "https://github.com/AT-LOW45/adra.git"
 	},
 	"description": "RAG based code completion to enforce org wide standards",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"engines": {
 		"vscode": "^1.120.0"
 	},
