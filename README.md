@@ -1,10 +1,10 @@
-# Patterngen
+# Adra
 
 **RAG-based code generation and editing that enforces your team's architectural decisions.**
 
-Patterngen is a VS Code extension that generates and edits code grounded in your own **Architecture Decision Records (ADRs)**. Instead of producing generic code, it retrieves the ADRs relevant to what you're building and instructs the LLM to follow them — so the code matches your team's conventions for error handling, data fetching, response shapes, and whatever else you've documented.
+Adra is a VS Code extension that generates and edits code grounded in your own **Architecture Decision Records (ADRs)**. Instead of producing generic code, it retrieves the ADRs relevant to what you're building and instructs the LLM to follow them — so the code matches your team's conventions for error handling, data fetching, response shapes, and whatever else you've documented.
 
-Given a natural-language instruction, Patterngen reads the file you're working in, works out *what* to change and *where*, and applies precise edits in place — following your ADRs and resolving imports for you.
+Given a natural-language instruction, Adra reads the file you're working in, works out *what* to change and *where*, and applies precise edits in place — following your ADRs and resolving imports for you.
 
 ## How it works
 
@@ -24,14 +24,14 @@ VS Code applies the edits in place ──► editor auto-adds the imports
 
 Two ideas make this work:
 
-- **Whole-ADR retrieval.** Rather than returning scattered chunks, Patterngen identifies which *whole ADRs* are relevant to your request and feeds them to the LLM in full — so the concrete code examples in an ADR are never dropped. Irrelevant requests retrieve nothing, so the model just generates normally instead of being misled.
+- **Whole-ADR retrieval.** Rather than returning scattered chunks, Adra identifies which *whole ADRs* are relevant to your request and feeds them to the LLM in full — so the concrete code examples in an ADR are never dropped. Irrelevant requests retrieve nothing, so the model just generates normally instead of being misled.
 - **File-aware edits.** The model doesn't emit a blob to paste at your cursor. It returns a set of `{search, replace}` edits; the extension locates each `search` in your file — tolerant of whitespace and trivial formatting differences — and applies the replacement in place. So a single instruction can span multiple regions (a function *and* its callers), and a rename updates every occurrence. Imports are deliberately left out of the model's output and resolved afterward by the editor's language server, so they always point at the correct paths.
 
 ## Project structure
 
 | Path | Stack | Role |
 |------|-------|------|
-| `src/` | TypeScript · VS Code API | The extension itself |
+| `extension/` | TypeScript · VS Code API | The extension itself |
 | `rag/` | Python · FastAPI · LangChain · ChromaDB | Backend: indexes ADRs, retrieves context, generates edits |
 | `ui/` | Vue 3 · Vite · PrimeVue · TypeScript | Knowledge-base manager: upload, edit, delete ADRs |
 | `docs-site/` | VitePress | Documentation site (deployed to GitHub Pages) |
@@ -43,29 +43,50 @@ The Vue app is built to `ui/dist` and served by FastAPI at `/`, so the backend a
 
 The documentation site is built with VitePress from `docs-site/` and deployed to **GitHub Pages** on every change (see [`.github/workflows/deploy-docs.yml`](.github/workflows/deploy-docs.yml)):
 
-**https://at-low45.github.io/patterngen/**
+**https://at-low45.github.io/adra/**
 
 ## Prerequisites
 
 - **Python ≥ 3.13** and [`uv`](https://docs.astral.sh/uv/)
 - **Node.js** (for the Vue knowledge-base UI, and the docs site)
-- An **LLM API key** — Groq is the current default (`openai/gpt-oss-120b`); the model and provider are configurable (see [llm_config.py](rag/config/llm_config.py))
+- An **LLM API key**. Any OpenAI-compatible provider works — Groq (the default), OpenAI, OpenRouter, Together, DeepSeek — as does a local runtime such as [Ollama](https://ollama.com) or LM Studio, which keeps your ADRs off third-party infrastructure.
+
+  > **The model must support tool calling / structured output.** Both the ADR quality review and code generation ask the model for a structured response rather than free text. A model without that support fails at call time, not at startup — and small local models often lack it.
 - An **S3-compatible blob store** (for persisting raw ADR content) — for local development, use the bundled [MinIO](https://min.io/) setup, which only requires **Docker** (see step 2)
 
 ## Setup
 
 ### 1. Configure environment
 
-Create a `.env` at the repo root (the `GROQ_API_KEY` below reflects the current default LLM provider — adjust if you configure a different one):
+Create a `.env` at the repo root:
 
 ```env
-GROQ_API_KEY=your_groq_key
-# GROQ_MODEL=openai/gpt-oss-120b   # optional — override the default model
+LLM_API_KEY=your_api_key
+# LLM_BASE_URL=https://api.groq.com/openai/v1   # optional — defaults to Groq
+# LLM_MODEL=openai/gpt-oss-120b                 # optional — default model
 API_ENDPOINT=http://localhost:8000
 BLOB_ENDPOINT=http://localhost:9000
 BLOB_ACCESS_KEY=...
 BLOB_SECRET_KEY=...
-BLOB_BUCKET=patterngen-docs
+BLOB_BUCKET=adra-docs
+```
+
+> `GROQ_API_KEY` and `GROQ_MODEL` are still read as fallbacks, so an existing `.env` keeps working.
+
+**Using a different provider** — set the base URL and model; the key is whatever that provider issues:
+
+```env
+# OpenAI
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o
+
+# OpenRouter (proxies Anthropic, Gemini and others)
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_MODEL=anthropic/claude-sonnet-4
+
+# Local Ollama — nothing leaves your machine
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=llama3.1
 ```
 
 > The `BLOB_*` values are also consumed by the bundled MinIO setup (step 2): `BLOB_ACCESS_KEY`/`BLOB_SECRET_KEY` become MinIO's root credentials and `BLOB_BUCKET` is the bucket it creates. Use `http://localhost:9000` for `BLOB_ENDPOINT` when running MinIO locally. If you point at a managed S3-compatible store instead, set these to that store's values and skip step 2. Note: MinIO requires the access key to be **≥ 3 characters** and the secret key **≥ 8 characters**, or the container won't start.
@@ -88,7 +109,9 @@ docker compose down       # stop (data is preserved)
 docker compose down -v    # stop and delete all stored objects
 ```
 
-Skip this step if you're using a managed S3-compatible store; just point the `BLOB_*` values in `.env` at it.
+Skip this step if you're using a managed S3-compatible store; just point the `BLOB_*` values in `.env` at it — **the bucket must already exist**, as Adra checks it is reachable but never creates it. (The MinIO setup above creates it for you; on S3, R2 or similar you create it yourself.)
+
+> Blob storage is required, not optional — every ADR is stored there. The backend refuses to start if the `BLOB_*` values are missing, or if the bucket can't be reached, and says which. That is deliberate: left unchecked it would start, serve the UI and show an empty knowledge base, which reads as "no ADRs yet" rather than "storage was never set up".
 
 ### 3. Build the knowledge-base UI
 
@@ -111,14 +134,14 @@ The knowledge-base UI is now available at `http://localhost:8000`.
 
 ### 5. Run the extension
 
-Open the repo in VS Code and press **F5** to launch an Extension Development Host with Patterngen loaded.
+Open the repo in VS Code and press **F5** to launch an Extension Development Host with Adra loaded.
 
 ## Usage
 
 | Command | What it does |
 |---------|--------------|
-| **Patterngen: Generate Code** | Prompts for an instruction, sends the active file and its language to the backend, and applies the returned ADR-grounded edits **in place** — resolving imports automatically. If you have code selected, that selection is used as the focus for the change. |
-| **Patterngen: Open Knowledge Base** | Opens the knowledge-base UI (the `ragEndpoint`) in your browser to manage ADRs. |
+| **Adra: Generate Code** | Prompts for an instruction, sends the active file and its language to the backend, and applies the returned ADR-grounded edits **in place** — resolving imports automatically. If you have code selected, that selection is used as the focus for the change. |
+| **Adra: Open Knowledge Base** | Opens the knowledge-base UI (the `ragEndpoint`) in your browser to manage ADRs. |
 
 On activation the extension checks that the backend is reachable and warns if it isn't, so backend-dependent commands fail gracefully rather than silently.
 
@@ -130,7 +153,7 @@ Use the knowledge base UI to upload markdown ADRs, edit them in-place, and delet
 
 This extension contributes the following setting:
 
-- `patterngen.ragEndpoint` — URL of the RAG backend. Default: `http://127.0.0.1:8000`.
+- `adra.ragEndpoint` — URL of the RAG backend. Default: `http://127.0.0.1:8000`.
 
 ## Retrieval details
 
@@ -151,5 +174,5 @@ This extension contributes the following setting:
 
 - **Contributing guide:** [CONTRIBUTING.md](CONTRIBUTING.md) — branching model, branch naming, and PR conventions.
 - **CI:** GitHub Actions runs compile/lint (extension), build (UI), Pyright (backend), and the docs build on every pull request, plus CodeQL/Dependabot/secret scanning. `main` is protected — changes land via pull request.
-- **Roadmap & tasks:** [GitHub Issues](https://github.com/AT-LOW45/patterngen/issues)
+- **Roadmap & tasks:** [GitHub Issues](https://github.com/AT-LOW45/adra/issues)
 - [CHANGELOG.md](CHANGELOG.md) — user-facing release notes

@@ -10,7 +10,7 @@ dotenv.config();
 /** Extension entry point — registers the commands and starts the backend liveness check. */
 export async function activate(context: vscode.ExtensionContext) {
 	const { registerCommand } = vscode.commands;
-	console.log("welcome to patterngen!");
+	console.log("welcome to adra!");
 
 	context.subscriptions.push(
 		registerCommand(
@@ -30,5 +30,5 @@ export async function activate(context: vscode.ExtensionContext) {
 
 /** Called when the extension is deactivated. */
 export function deactivate() {
-	console.log("Thanks for using patterngen!");
+	console.log("Thanks for using adra!");
 }

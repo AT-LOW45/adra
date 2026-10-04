@@ -1,8 +1,14 @@
 {
-	"name": "patterngen",
-	"displayName": "patterngen",
+	"name": "adra",
+	"displayName": "Adra",
+	"publisher": "at-low45",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/AT-LOW45/adra.git"
+	},
 	"description": "RAG based code completion to enforce org wide standards",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"engines": {
 		"vscode": "^1.120.0"
 	},
@@ -11,14 +17,12 @@
 		"Programming Languages",
 		"Snippets"
 	],
-	"activationEvents": [
-		"*"
-	],
-	"main": "./out/extension.js",
+	"activationEvents": [],
+	"main": "./out/main.js",
 	"contributes": {
 		"configuration": {
 			"properties": {
-				"patterngen.ragEndpoint": {
+				"adra.ragEndpoint": {
 					"type": "string",
 					"default": "http://127.0.0.1:8000",
 					"description": "URL of the RAG server"
@@ -27,11 +31,11 @@
 		},
 		"commands": [
 			{
-				"command": "patterngen.generateCode",
+				"command": "adra.generateCode",
 				"title": "Generate Code"
 			},
 			{
-				"command": "patterngen.openKnowledgeBase",
+				"command": "adra.openKnowledgeBase",
 				"title": "Open Knowledge Base"
 			}
 		]
@@ -40,7 +44,7 @@
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
 		"pretest": "npm run compile && npm run lint",
-		"lint": "eslint src",
+		"lint": "eslint extension",
 		"test": "vscode-test"
 	},
 	"devDependencies": {
@@ -49,6 +53,7 @@
 		"@types/vscode": "^1.120.0",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
+		"@vscode/vsce": "^4.0.0",
 		"eslint": "^9.39.3",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.56.1"

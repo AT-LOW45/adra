@@ -1,7 +1,7 @@
 import axios, { CreateAxiosDefaults } from "axios";
 import * as vscode from "vscode";
 
-const config = vscode.workspace.getConfiguration("patterngen");
+const config = vscode.workspace.getConfiguration("adra");
 const ragBaseUrl = config.get<string>("ragEndpoint");
 
 const axiosConfig: CreateAxiosDefaults = {

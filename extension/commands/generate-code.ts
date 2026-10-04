@@ -197,7 +197,7 @@ export default async function generateCode(context: vscode.ExtensionContext) {
 		const edits = await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
-				title: "Patterngen: generating boilerplate...",
+				title: "Adra: generating boilerplate...",
 				cancellable: false,
 			},
 			async () => {
@@ -219,7 +219,7 @@ export default async function generateCode(context: vscode.ExtensionContext) {
 
 		if (missed > 0) {
 			vscode.window.showWarningMessage(
-				`Patterngen: ${missed} change(s) couldn't be located in the file and were skipped.`,
+				`Adra: ${missed} change(s) couldn't be located in the file and were skipped.`,
 			);
 		}
 

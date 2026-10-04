@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 
 export default function openKnowledgeBase() {
-	const config = vscode.workspace.getConfiguration("patterngen");
+	const config = vscode.workspace.getConfiguration("adra");
 	const ragBaseUrl = config.get<string>("ragEndpoint");
 
 	if (!ragBaseUrl) {

@@ -1,6 +1,6 @@
 import re
 from typing import List
-from config.llm_config import groq_llm
+from config.llm_config import llm
 from config.review_config import DEFAULT_SECTIONS, MAX_WORDS
 from schema.knowledgebase_schema import (
     ReviewResultSchema,
@@ -112,7 +112,7 @@ async def run_llm_review(
     )
 
     # with_structured_output forces the model to return a validated ReviewOutputSchema
-    structured_llm = groq_llm.with_structured_output(ReviewOutputSchema)
+    structured_llm = llm.with_structured_output(ReviewOutputSchema)
     chain = template | structured_llm
 
     try:
