@@ -43,11 +43,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
-          # :1.2.3, :1.2, :latest from the release tag. "latest" only on a real release,
-          # never on a manual rebuild of an older ref.
+          # :1.2.3 and :1.2 come from the tag, so they only appear when the run is on a
+          # tag ref -- a published release, or a manual rebuild with a tag selected.
+          # A manual run from a branch gets the branch name instead, which keeps the
+          # push valid: with no rule matching, buildx fails with "tag is needed".
+          # "latest" is reserved for a real release, never a rebuild of an older ref.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
 
       - uses: docker/build-push-action@v6
