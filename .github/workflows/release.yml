@@ -1,0 +1,94 @@
+name: Release
+
+# Driven by GitHub Releases rather than tag pushes, so publishing is a deliberate act:
+# drafting a release is reviewable and reversible right up until it is published.
+on:
+  release:
+    types: [published]
+  # Lets the image be rebuilt without cutting a new release (e.g. a base-image CVE).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Backend image → GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # pushing to GHCR; GITHUB_TOKEN is enough, no extra secret
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ghcr.io wants a lowercase path; the owner here is mixed case.
+      - name: Resolve image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          # :1.2.3, :1.2, :latest from the release tag. "latest" only on a real release,
+          # never on a manual rebuild of an older ref.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  extension:
+    name: Extension → Marketplace
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'release' }}
+    permissions:
+      contents: write # attaching the .vsix to the release
+    # Job-level so the publish step can test it: a step's own `env` is not in scope for
+    # that step's `if`, which would silently make the condition always false.
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+
+      # The .vsix is attached to the release regardless, so there is always an artifact
+      # to install by hand even if Marketplace publishing is not configured.
+      - name: Package
+        run: npx vsce package --out adra.vsix
+
+      - name: Attach .vsix to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: adra.vsix
+
+      # Skipped when no token is configured, so the workflow is usable before the
+      # Marketplace side exists — the image and the .vsix still ship either way.
+      - name: Publish to the Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        run: npx vsce publish --packagePath adra.vsix
