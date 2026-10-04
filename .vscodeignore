@@ -28,6 +28,8 @@ ui/**
 docs/**
 docs-site/**
 docker-compose.yml
+Dockerfile
+.dockerignore
 
 # Repo meta
 .github/**
