@@ -4,6 +4,9 @@ import codeActions from "../constants/code-actions";
 import { applyCodeEdits, CodeEdit } from "../service/edit.service";
 import * as vscode from "vscode";
 
+/** An Output channel works with no debugger attached, unlike console.log. View: Output → "Patterngen". */
+const log = vscode.window.createOutputChannel("Patterngen");
+
 /** Ask the language server for the code actions available in `range`, optionally filtered to a `kind`. */
 async function requestCodeActions(
 	document: vscode.TextDocument,
@@ -16,25 +19,65 @@ async function requestCodeActions(
 			document.uri,
 			range,
 			kind,
-			// itemResolveCount: force the provider to resolve each action's edit.
-			// Without it, action.edit comes back undefined and there's nothing to apply.
-			50,
+			50, // itemResolveCount — without it, action.edit comes back undefined
 		)) ?? []
 	);
 }
 
+/** How an import statement begins, across the languages a language server might serve. */
+const IMPORT_STATEMENT = /^(import\b|from\s|export\s+\*|require\b|const\s.*\brequire\s*\(|using\s|#include\b|use\s)/;
+
 /**
- * The generated code deliberately omits imports, so ask the language server to add
- * them. TS/JS expose a dedicated `source.addMissingImports` action; Vue/Volar only
- * surface a titled action, so we fall back to that. The server needs a beat to
- * analyse the freshly inserted code, hence the short retry loop.
+ * The import statement this action would insert, or null if it isn't an import fix.
+ *
+ * Identified by its EDIT, not its title: titles are vendor-specific and localised. An
+ * import inserts a whole line; a suppression (`# type: ignore`) appends to the error's own
+ * line. An action may carry other edits alongside (Pylance also rewrites the symbol).
+ */
+function importInsertionText(action: vscode.CodeAction, document: vscode.TextDocument): string | null {
+	// Imports are quickfixes. Refactors insert whole lines too — TS's "Generate get/set
+	// accessors" got applied 7 times before this check existed.
+	if (!action.kind || !vscode.CodeActionKind.QuickFix.contains(action.kind)) {
+		return null;
+	}
+
+	const entries = action.edit?.entries() ?? [];
+
+	// An import fix only ever touches the file being fixed.
+	if (entries.length !== 1) {
+		return null;
+	}
+	const [uri, edits] = entries[0];
+	if (uri.toString() !== document.uri.toString()) {
+		return null;
+	}
+
+	// The whole-line insertion is the import; any other edits in the action are ignored.
+	const lineInsert = edits.find((edit) => edit.range.isEmpty && edit.newText.includes("\n") && edit.newText.trim());
+	if (!lineInsert) {
+		return null;
+	}
+
+	const statement = lineInsert.newText.trim();
+
+	// An import is a single statement, never a multi-line block (that's a refactor).
+	if (statement.includes("\n")) {
+		return null;
+	}
+
+	// Finally, it must actually READ like an import. These are language keywords, not UI
+	// labels — never translated, never renamed — so unlike action titles they're safe to
+	// match on. Without this, any single-line quickfix qualified (TS's "generate get/set
+	// accessors" was applied 7 times).
+	return IMPORT_STATEMENT.test(statement) ? statement : null;
+}
+
+/**
+ * Generated code omits imports by design, so have the language server add them. Two routes:
+ * a whole-file `source.addMissingImports` (TS/JS, Volar), else a per-diagnostic quickfix
+ * (Pylance). Retries because the server needs a beat to analyse newly inserted code.
  */
 async function applyAddMissingImports(document: vscode.TextDocument): Promise<boolean> {
-	const isImportAction = (a: vscode.CodeAction) =>
-		a.kind?.value === codeActions.addMissingImports ||
-		/add all missing imports/i.test(a.title) ||
-		/^add import\b/i.test(a.title);
-
 	const errorDiagnostics = () =>
 		vscode.languages
 			.getDiagnostics(document.uri)
@@ -44,16 +87,27 @@ async function applyAddMissingImports(document: vscode.TextDocument): Promise<bo
 		new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length));
 
 	let appliedAny = false;
+	// A stale diagnostic re-offers a fix we already applied -> duplicate imports.
+	const alreadyApplied = new Set<string>();
+	// Fix-all only needs one successful run; re-running re-inserts what it already added.
+	let sourceActionUsed = false;
+	log.show(true); // reveal without stealing focus
 
 	for (let round = 0; round < 10; round++) {
-		// Prefer the "add all missing imports" source action — it fixes everything in one
-		// shot and is reliably returned over the whole file.
-		const sourceActions = await requestCodeActions(document, fullRange(), codeActions.addMissingImports);
-		let action = sourceActions.find(isImportAction);
+		// Fix-all route. Requested BY KIND, so anything returned is already the right action.
+		let action: vscode.CodeAction | undefined;
+		let chosenImport: string | undefined;
+		let fromSourceAction = false;
 
-		// Otherwise drive it per-diagnostic: the singular "Add import from '…'" is a
-		// quick-fix scoped to a diagnostic, so it only shows when requested AT that
-		// diagnostic's range (this is what Cmd+. does at the cursor).
+		if (!sourceActionUsed) {
+			const sourceActions = await requestCodeActions(document, fullRange(), codeActions.addMissingImports);
+			action = sourceActions[0];
+			// Consumed only on a successful apply — round 1 often returns it unresolved.
+			fromSourceAction = Boolean(action);
+		}
+
+		// Per-diagnostic route: the singular fix only appears when asked AT the error's range
+		// (what Cmd+. does).
 		if (!action) {
 			const diagnostics = errorDiagnostics();
 			if (diagnostics.length === 0) {
@@ -64,9 +118,30 @@ async function applyAddMissingImports(document: vscode.TextDocument): Promise<bo
 				continue;
 			}
 			for (const diagnostic of diagnostics) {
-				const atDiagnostic = await requestCodeActions(document, diagnostic.range);
-				action = atDiagnostic.find(isImportAction);
-				if (action) {
+				const errorLine = diagnostic.range.start.line;
+				const offered = await requestCodeActions(document, diagnostic.range);
+
+				const candidates: { action: vscode.CodeAction; inserts: string }[] = [];
+				for (const candidate of offered) {
+					const inserts = importInsertionText(candidate, document);
+					if (inserts !== null && !alreadyApplied.has(inserts)) {
+						candidates.push({ action: candidate, inserts });
+					}
+				}
+
+				// Servers don't rank best-first (Pylance put "from uvicorn import logging" above
+				// "import logging"); the shortest statement is the most direct module.
+				candidates.sort((a, b) => a.inserts.length - b.inserts.length);
+
+				log.appendLine(
+					`line ${errorLine}: ${offered.length} offered, ${candidates.length} import-shaped` +
+						(candidates.length ? ` -> chose ${JSON.stringify(candidates[0].inserts)}` : "") +
+						candidates.slice(1).map((c) => `\n    skipped ${JSON.stringify(c.inserts)}`).join(""),
+				);
+
+				if (candidates.length > 0) {
+					action = candidates[0].action;
+					chosenImport = candidates[0].inserts;
 					break;
 				}
 			}
@@ -84,6 +159,14 @@ async function applyAddMissingImports(document: vscode.TextDocument): Promise<bo
 		} else {
 			await new Promise((resolve) => setTimeout(resolve, 400)); // found but edit unresolved — wait
 			continue;
+		}
+
+		if (fromSourceAction) {
+			sourceActionUsed = true;
+			log.appendLine(`applied the whole-file "add all missing imports" action`);
+		}
+		if (chosenImport) {
+			alreadyApplied.add(chosenImport);
 		}
 
 		await new Promise((resolve) => setTimeout(resolve, 300)); // let diagnostics refresh
