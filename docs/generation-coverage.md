@@ -53,8 +53,6 @@ Generated code omits imports by design, so the extension asks the language serve
   project's exports.
 - **Reformats code outside the request** — dropped a trailing comma, changed brace style,
   collapsed a template paragraph. Edits should be minimal.
-- **Retrieval sources aren't logged**, so "was the right ADR pulled?" can only be inferred
-  from the output. A log line in `chroma_helper.search_index` would fix this.
 - **Whole-file context doesn't scale** — the entire file is sent, so a 2758-line file risks
   the 60s timeout.
 - The per-diagnostic route can't handle a **merge-style** fix (rewriting an existing import

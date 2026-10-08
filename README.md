@@ -69,6 +69,7 @@ BLOB_ENDPOINT=http://localhost:9000
 BLOB_ACCESS_KEY=...
 BLOB_SECRET_KEY=...
 BLOB_BUCKET=adra-docs
+# LOG_LEVEL=INFO                                # optional — DEBUG also logs retrieval queries
 ```
 
 > `GROQ_API_KEY` and `GROQ_MODEL` are still read as fallbacks, so an existing `.env` keeps working.

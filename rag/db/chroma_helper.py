@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -7,6 +8,8 @@ from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 from langchain_core.indexing import IndexingResult, index
 from langchain_classic.indexes import SQLRecordManager
+
+logger = logging.getLogger("adra.retrieval")
 
 # Anchored to this file's location rather than a bare "./chroma_db" — a relative path
 # resolves against the process's cwd, so running a script from rag/scripts instead of
@@ -148,6 +151,17 @@ async def search_index(
         key=lambda s: best_score[s],
         reverse=True,
     )[:max_sources]
+
+    # Every candidate with its score, not just the kept ones, so a miss shows how close
+    # it came to score_threshold. The query is user content, so it stays at DEBUG.
+    logger.debug("query=%r", query)
+    ranked = sorted(best_score.items(), key=lambda item: item[1], reverse=True)
+    logger.info(
+        "kept=[%s] dropped=[%s] threshold=%.2f",
+        ", ".join(f"{s} {score:.2f}" for s, score in ranked if s in relevant),
+        ", ".join(f"{s} {score:.2f}" for s, score in ranked if s not in relevant),
+        score_threshold,
+    )
 
     if not relevant:
         return ""
