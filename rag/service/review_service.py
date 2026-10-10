@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import List
 from config.llm_config import llm
@@ -9,6 +10,8 @@ from schema.knowledgebase_schema import (
     SectionSpec,
 )
 from langchain_core.prompts import ChatPromptTemplate
+
+logger = logging.getLogger("adra.review")
 
 
 def required_titles(sections: list[SectionSpec]) -> list[str]:
@@ -120,7 +123,7 @@ async def run_llm_review(
     except Exception as error:
         # Advisory feature — never fail the caller because the LLM hiccuped, but report
         # ok=False so a silent failure isn't mistaken for a clean review.
-        print(f"LLM review failed: {error}")
+        logger.warning("LLM review failed: %s", error)
         return [], False
 
     findings = response.findings if isinstance(response, ReviewOutputSchema) else []
