@@ -16,7 +16,34 @@ RUN npm run build
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — the backend.
+# Stage 2 — download the embedding model.
+#
+# Pinned to BUILDPLATFORM so it always runs on the builder's own architecture. Model
+# weights are plain data: byte-identical on every CPU. Left in the backend stage, this
+# download and the torch load it performs would be emulated once per target platform
+# during a multi-arch build -- minutes of instruction translation for a result that does
+# not differ. Here it runs once, natively, and both architectures copy the same cache.
+# ---------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS model
+
+WORKDIR /app/rag
+COPY rag/pyproject.toml rag/uv.lock ./
+RUN uv sync --frozen --no-dev
+COPY rag/ ./
+
+# Warmed by importing the module the app itself uses, so the cache holds exactly what it
+# loads at runtime, at the revision pinned in chroma_helper.py. Deliberately not a
+# hardcoded model id here -- that would be a second source of truth, free to drift from
+# the one the app actually loads, and the failure would only appear at runtime offline.
+# The data paths are sent to /tmp so the build does not write into the volume mountpoint.
+ENV HF_HOME=/opt/huggingface
+RUN CHROMA_DB_PATH=/tmp/warm RECORD_MANAGER_PATH=/tmp/warm.db \
+    .venv/bin/python -c "import db.chroma_helper" \
+ && rm -rf /tmp/warm /tmp/warm.db
+
+
+# ---------------------------------------------------------------------------
+# Stage 3 — the backend.
 # ---------------------------------------------------------------------------
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
@@ -47,14 +74,9 @@ ENV HOST=0.0.0.0 \
 # whereas /data is the operator's volume. Keeping them apart avoids relying on Docker's
 # copy-into-empty-volume behaviour.
 ENV HF_HOME=/opt/huggingface
-# Warmed by importing the module the app itself uses, so the cache holds exactly what it
-# loads at runtime, at the revision pinned in chroma_helper.py. The data paths are sent
-# to /tmp for this one step so the build does not write into the volume mountpoint.
-RUN CHROMA_DB_PATH=/tmp/warm RECORD_MANAGER_PATH=/tmp/warm.db \
-    .venv/bin/python -c "import db.chroma_helper" \
- && rm -rf /tmp/warm /tmp/warm.db
+COPY --from=model /opt/huggingface /opt/huggingface
 
-# Set AFTER the warm-up above, which needs the network. From here on the hub libraries
+# Set AFTER the cache is in place. From here on the hub libraries
 # must work from the baked cache alone: by default they still contact HuggingFace to
 # revalidate even when a model is cached, which would reintroduce the runtime network
 # dependency the baking was meant to remove — and make the image unusable offline.
