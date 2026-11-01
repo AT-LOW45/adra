@@ -68,37 +68,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  extension:
-    name: Extension → Marketplace
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'release' }}
-    permissions:
-      contents: write # attaching the .vsix to the release
-    # Job-level so the publish step can test it: a step's own `env` is not in scope for
-    # that step's `if`, which would silently make the condition always false.
-    env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-      - run: npm ci
-
-      # The .vsix is attached to the release regardless, so there is always an artifact
-      # to install by hand even if Marketplace publishing is not configured.
-      - name: Package
-        run: npx vsce package --out adra.vsix
-
-      - name: Attach .vsix to the release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: adra.vsix
-
-      # Skipped when no token is configured, so the workflow is usable before the
-      # Marketplace side exists — the image and the .vsix still ship either way.
-      - name: Publish to the Marketplace
-        if: ${{ env.VSCE_PAT != '' }}
-        run: npx vsce publish --packagePath adra.vsix
