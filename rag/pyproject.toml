@@ -14,6 +14,7 @@ dependencies = [
     "langchain-community>=0.4.2",
     "langchain-huggingface>=1.2.2",
     "langchain-openai>=1.6.6",
+    "mcp>=2.3.0",
     "pydantic>=2.13.4",
     "python-multipart>=0.0.29",
     "sentence-transformers>=5.5.1",
