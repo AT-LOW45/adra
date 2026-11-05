@@ -66,6 +66,7 @@ BLOB_ACCESS_KEY=...
 BLOB_SECRET_KEY=...
 BLOB_BUCKET=adra-docs
 # LOG_LEVEL=INFO                                # optional — DEBUG also logs retrieval queries
+# RETRIEVAL_THRESHOLD=0.58                      # optional — minimum score for an ADR to be returned
 ```
 
 > `GROQ_API_KEY` and `GROQ_MODEL` are still read as fallbacks, so an existing `.env` keeps working.
@@ -161,7 +162,7 @@ Ask your agent for code as usual. You don't need to mention Adra or ADRs. The ag
 
 | MCP tool | What it does |
 |---------|--------------|
-| `search_adrs(query)` | Returns the ADRs relevant to a coding task, each in full. Returns an empty string when none apply. |
+| `search_adrs(query)` | Returns the ADRs relevant to a coding task, each in full. When none apply, it says so, and the agent writes code following the existing codebase. |
 | `list_adrs()` | Lists every ADR in the knowledge base as `{source, adr_id, title}`. |
 
 To make sure an agent checks the ADRs, add a line to your project's `CLAUDE.md` (or your agent's equivalent):
@@ -174,7 +175,7 @@ Before writing or changing code, call the `adra` MCP server's `search_adrs` tool
 
 ```
 INFO:     adra.mcp - search_adrs called
-INFO:     adra.retrieval - kept=[fastapi-endpoint-conventions 0.71] dropped=[...] threshold=0.50
+INFO:     adra.retrieval - kept=[fastapi-endpoint-conventions 0.71] dropped=[...] threshold=0.58
 ```
 
 Set `LOG_LEVEL=DEBUG` to log the agent's search queries as well.
@@ -200,7 +201,8 @@ Use the knowledge base UI to write ADRs from a template, upload markdown ADRs, e
 - **Adra can't force an agent to follow ADRs.** The agent decides whether to call `search_adrs` and how much weight to give the result. The server instructions and a `CLAUDE.md` line make it very likely, but it isn't guaranteed.
 - **Local hosts only, for now.** The MCP endpoint's DNS-rebinding protection accepts only `localhost` / `127.0.0.1`. A backend deployed behind a real hostname needs that host added to an allow list, which isn't configurable yet.
 - **No authentication.** Neither the MCP endpoint nor the REST API checks who is calling. Keep the backend on a trusted network.
-- The relevance threshold (`0.5`) is calibrated against a small knowledge base and is currently loose: unrelated requests can retrieve an ADR. Revisit it as you add ADRs, using `rag/scripts/calibrate_threshold.py`.
+- **The relevance threshold (`0.58`) was calibrated on a small knowledge base.** It separates coding tasks an ADR covers from tasks it doesn't, but the margin is narrow, and scores depend on how your team writes its ADRs. Re-check it as you add ADRs: edit the example tasks in `rag/scripts/calibrate_threshold.py`, run it, and apply the value it suggests, either as `RETRIEVAL_THRESHOLD` (needs a restart) or with `PUT /settings` and a body of `{"retrieval_threshold": 0.61}` (applies immediately, is stored with the ADRs and overrides the env var).
+- A request can still pull in a second, less relevant ADR alongside the right one; the threshold only decides whether anything is returned at all, not how many.
 - Retrieval still depends somewhat on phrasing. If quality degrades as the knowledge base grows, query enrichment (e.g. HyDE) or a hosted embedding model are the next levers.
 
 ## VS Code extension (on hold)

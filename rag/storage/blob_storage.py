@@ -110,6 +110,35 @@ def list_drafts_from_blob() -> list[tuple[str, str]]:
     return drafts
 
 
+# Team-level settings, as one JSON object at `settings/settings.json`. Kept in the bucket
+# rather than on the data volume so a backup of the bucket (mc mirror, #17) carries them
+# with the ADRs. Like drafts/, the prefix keeps it out of the ADR keys, which never
+# contain a "/" -- anything that lists the bucket to re-index ADRs must skip both.
+SETTINGS_KEY = "settings/settings.json"
+
+
+def get_settings_from_blob() -> str | None:
+    """The settings JSON string, or None if nothing has been saved yet."""
+    try:
+        response = client.get_object(Bucket=BUCKET, Key=SETTINGS_KEY)
+        return response["Body"].read().decode("utf-8")
+    except ClientError as error:
+        # Only "not saved yet" means use the defaults. Any other failure is raised, so an
+        # unreachable store can't silently reset the team's settings.
+        if error.response.get("Error", {}).get("Code") == "NoSuchKey":
+            return None
+        raise
+
+
+def save_settings_to_blob(content: str) -> None:
+    client.put_object(
+        Bucket=BUCKET,
+        Key=SETTINGS_KEY,
+        Body=content.encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
 def upload_to_blob(content: str, source: str) -> None:
     client.put_object(
         Bucket=BUCKET,

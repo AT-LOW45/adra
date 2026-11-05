@@ -3,6 +3,7 @@ import logging
 from mcp.server.mcpserver import MCPServer
 
 from db.chroma_helper import list_records, search_index
+from service.settings_service import retrieval_threshold
 
 # Retrieval logs the same line whichever caller triggered it; this marks the agent's calls.
 logger = logging.getLogger("adra.mcp")
@@ -18,7 +19,12 @@ Before writing or changing code, call search_adrs with a short description of th
 Follow every ADR it returns, including its code examples, over general best practice or
 the style of surrounding code. When you follow one, say which ADR it was.
 
-An empty result means no ADR applies; write the code normally."""
+If search_adrs reports that no ADR applies, write the code following the existing
+codebase."""
+
+# Returned instead of an empty string, so the agent can tell "searched, nothing applies"
+# from a failed or missing call. search_index itself still returns "" for its other caller.
+NO_MATCH = "No ADR applies to this task. Write the code following the existing codebase."
 
 # log_level is not just this server's: MCPServer runs logging.basicConfig on the root
 # logger, and at the default INFO that surfaces every third-party INFO line (httpx
@@ -31,12 +37,12 @@ async def search_adrs(query: str) -> str:
     """Find the team's ADRs relevant to a coding task and return each one in full.
 
     The returned ADRs are binding team conventions: follow them, including their code
-    examples. An empty string means no ADR applies.
+    examples. If none apply, it says so, and the code should follow the existing codebase.
     """
     # The query is user content, so it stays at DEBUG, as in search_index.
     logger.info("search_adrs called")
     logger.debug("search_adrs query=%r", query)
-    return await search_index(query)
+    return await search_index(query, score_threshold=retrieval_threshold()) or NO_MATCH
 
 
 @mcp.tool()

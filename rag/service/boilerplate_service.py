@@ -1,5 +1,6 @@
 from config.llm_config import llm
 from db.chroma_helper import search_index
+from service.settings_service import retrieval_threshold
 from schema.boilerplate_schema import GenerateBoilerplateRequest, BoilerplateEdits
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -58,7 +59,7 @@ async def run_generate_boilerplate(request: GenerateBoilerplateRequest) -> Boile
         ]
     )
 
-    context = await search_index(request.query)
+    context = await search_index(request.query, score_threshold=retrieval_threshold())
 
     structured_llm = llm.with_structured_output(BoilerplateEdits)
     chain = template | structured_llm
