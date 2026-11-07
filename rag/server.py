@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.logging import DefaultFormatter
 from router import boilerplate, knowledge_base, draft, settings, system
@@ -69,4 +70,27 @@ app.include_router(system.router)
 # "/mcp" breaks clients that POST to the bare URL. Must come before the catch-all UI mount.
 app.router.routes.extend(_mcp_app.routes)
 
-app.mount("/", StaticFiles(directory="../ui/dist", html=True), name="ui")
+class SpaStaticFiles(StaticFiles):
+    """Static files, falling back to index.html so client-side routes survive a refresh.
+
+    The UI routes entirely in the browser, so a path like /search-tuning exists only once
+    its JavaScript has loaded. Plain StaticFiles 404s on it, which means a refresh or a
+    pasted link lands on an error rather than the page. Returning index.html lets the
+    router resolve the path itself, as it does when navigating from inside the app.
+
+    Only reached when nothing above matched: the API routers and MCP are registered
+    first, so this never shadows them. A missing asset (.js, .css) also falls through to
+    index.html, which is unhelpful but harmless — the browser ignores an HTML body for a
+    script tag, and a missing asset means a broken build, not a routing question.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+app.mount("/", SpaStaticFiles(directory="../ui/dist", html=True), name="ui")

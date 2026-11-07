@@ -3,7 +3,8 @@ const ROUTES = {
 	knowledgeBase: "/knowledge-base",
 	knowledgeBaseRecord: "/knowledge-base/:id",
 	knowledgeBaseCreate: "/knowledge-base/create",
-	adrConfig: "/adr-config"
+	adrConfig: "/adr-config",
+	searchTuning: "/search-tuning"
 } as const;
 
 export default ROUTES;

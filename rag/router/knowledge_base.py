@@ -4,6 +4,7 @@ from exception.source_error import DuplicateSourceError, SourceDerivationError
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException, UploadFile, File, APIRouter
 from schema.boilerplate_schema import CreateDocumentRequest
+from schema.knowledgebase_schema import SearchPreviewRequest
 from service.knowledge_base_service import (
     create_document as kb_create_document,
     update_document as kb_update_document,
@@ -13,8 +14,10 @@ from service.knowledge_base_service import (
     get_document_chunks,
     delete_document,
     clear_documents,
+    search_preview,
 )
 from service.review_service import review_adr
+from service.settings_service import retrieval_threshold
 
 router = APIRouter(prefix="/knowledge-base", tags=["Knowledge Base"])
 
@@ -125,3 +128,19 @@ async def clear_knowledge_base_endpoint():
 @router.post("/adr-review")
 async def review_adr_endpoint(content: CreateDocumentRequest):
     return await review_adr(content.content)
+
+
+@router.post("/search-preview")
+async def search_preview_endpoint(request: SearchPreviewRequest):
+    """Run a coding task through retrieval and report every candidate ADR's score.
+
+    Answers "why did this task retrieve that ADR, or nothing at all" without reading
+    server logs. Threshold defaults to the one agents are served; passing one tries a
+    value before committing it through PUT /settings.
+    """
+    threshold = (
+        request.retrieval_threshold
+        if request.retrieval_threshold is not None
+        else retrieval_threshold()
+    )
+    return JSONResponse(content=await search_preview(request.query, threshold))

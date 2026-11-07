@@ -43,3 +43,22 @@ class ReviewResponseSchema(BaseModel):
         default=True,
         description="False when the semantic (LLM) pass errored — findings are structural-only.",
     )
+
+
+class SearchPreviewRequest(BaseModel):
+    """A coding task to run through retrieval, as an agent would phrase it."""
+
+    query: str = Field(
+        ...,
+        min_length=1,
+        description="The coding task to test, e.g. 'add an endpoint to list zones'.",
+    )
+    retrieval_threshold: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Evaluate at this threshold instead of the saved one, so a value can be "
+            "tried before it is saved. None uses the threshold agents currently get."
+        ),
+    )

@@ -126,20 +126,28 @@ def _assemble_source(source: str) -> str:
 # and callers pass that in, since this db layer must not import from the service layer.
 SCORE_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.58"))
 
+# How many ADRs a single search can return, so a vague task can't pull in the whole
+# knowledge base. One constant rather than a default repeated per function: both
+# retrieval and the tuning page's preview read it, and a second copy could disagree
+# with the first without anything failing.
+MAX_SOURCES = 3
 
-async def search_index(
+
+async def rank_sources(
     query: str,
     candidate_k: int = 36,
     score_threshold: float = SCORE_THRESHOLD,
-    max_sources: int = 3,
-) -> str:
-    """
-    Find which ADRs are relevant to the query, then return each relevant ADR in
-    full (not just the matched chunks) so code examples are never dropped.
+    max_sources: int = MAX_SOURCES,
+) -> list[dict]:
+    """Every candidate ADR with its best chunk score and whether retrieval keeps it.
 
-    - candidate_k: how many chunks to inspect when deciding which ADRs are relevant
-    - score_threshold: an ADR's best-matching chunk must clear this to be included
-    - max_sources: cap on how many ADRs to return, so a vague query can't pull in everything
+    Strongest first. Each entry is {source, adr_id, title, score, kept, dropped_reason},
+    where dropped_reason is None when kept, "below_threshold" when the score did not
+    clear it, or "over_max_sources" when it did but the cap was already full.
+
+    Split out from search_index so the tuning page can show why a task did or did not
+    retrieve an ADR. Both go through here, so a preview cannot disagree with what an
+    agent is actually given.
     """
     scored = await vector_store.asimilarity_search_with_relevance_scores(
         query, k=candidate_k
@@ -154,21 +162,57 @@ async def search_index(
         if score > best_score.get(source, float("-inf")):
             best_score[source] = score
 
-    # keep relevant sources, strongest first, capped
-    relevant = sorted(
-        (s for s, score in best_score.items() if score >= score_threshold),
-        key=lambda s: best_score[s],
-        reverse=True,
-    )[:max_sources]
+    ranked = sorted(best_score.items(), key=lambda item: item[1], reverse=True)
+    labels = {r["source"]: r for r in list_records()}
+
+    candidates: list[dict] = []
+    kept_count = 0
+    for source, score in ranked:
+        if score < score_threshold:
+            dropped_reason = "below_threshold"
+        elif kept_count >= max_sources:
+            dropped_reason = "over_max_sources"
+        else:
+            dropped_reason = None
+            kept_count += 1
+        label = labels.get(source, {})
+        candidates.append(
+            {
+                "source": source,
+                "adr_id": label.get("adr_id", ""),
+                "title": label.get("title", source),
+                "score": score,
+                "kept": dropped_reason is None,
+                "dropped_reason": dropped_reason,
+            }
+        )
+    return candidates
+
+
+async def search_index(
+    query: str,
+    candidate_k: int = 36,
+    score_threshold: float = SCORE_THRESHOLD,
+    max_sources: int = MAX_SOURCES,
+) -> str:
+    """
+    Find which ADRs are relevant to the query, then return each relevant ADR in
+    full (not just the matched chunks) so code examples are never dropped.
+
+    - candidate_k: how many chunks to inspect when deciding which ADRs are relevant
+    - score_threshold: an ADR's best-matching chunk must clear this to be included
+    - max_sources: cap on how many ADRs to return, so a vague query can't pull in everything
+    """
+    candidates = await rank_sources(query, candidate_k, score_threshold, max_sources)
+    relevant = [c["source"] for c in candidates if c["kept"]]
 
     # Every candidate with its score, not just the kept ones, so a miss shows how close
     # it came to score_threshold. The query is user content, so it stays at DEBUG.
     logger.debug("query=%r", query)
-    ranked = sorted(best_score.items(), key=lambda item: item[1], reverse=True)
     logger.info(
         "kept=[%s] dropped=[%s] threshold=%.2f",
-        ", ".join(f"{s} {score:.2f}" for s, score in ranked if s in relevant),
-        ", ".join(f"{s} {score:.2f}" for s, score in ranked if s not in relevant),
+        ", ".join(f"{c['source']} {c['score']:.2f}" for c in candidates if c["kept"]),
+        ", ".join(f"{c['source']} {c['score']:.2f}" for c in candidates if not c["kept"]),
         score_threshold,
     )
 

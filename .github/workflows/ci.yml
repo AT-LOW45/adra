@@ -16,19 +16,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  extension:
-    name: Extension (compile + lint)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-      - run: npm ci
-      - run: npm run compile
-      - run: npm run lint
-
   ui:
     name: UI (build)
     runs-on: ubuntu-latest

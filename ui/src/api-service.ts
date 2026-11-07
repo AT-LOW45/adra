@@ -11,6 +11,35 @@ const api = axios.create(axiosConfig);
 // come from metadata — the ADR number is no longer part of the key.
 export type AdrRecord = { source: string; adr_id: string; title: string };
 
+// One candidate ADR from a retrieval preview. `score` is the best-matching chunk's
+// relevance; `dropped_reason` says why a candidate the agent won't see was excluded.
+export type SearchCandidate = {
+	source: string;
+	adr_id: string;
+	title: string;
+	score: number;
+	kept: boolean;
+	dropped_reason: "below_threshold" | "over_max_sources" | null;
+};
+
+// `retrieval_threshold` is the value the preview was evaluated at — the scores only
+// mean anything read against it. `max_sources` is the server's cap on how many ADRs a
+// search returns, sent so callers don't keep their own copy of it.
+export type SearchPreview = {
+	query: string;
+	retrieval_threshold: number;
+	max_sources: number;
+	candidates: SearchCandidate[];
+};
+
+// `retrieval_threshold_source` distinguishes a value the team saved from the built-in
+// default, so the UI can offer "reset" only when there is something to reset.
+export type Settings = {
+	retrieval_threshold: number;
+	retrieval_threshold_source: "saved" | "default";
+	default_retrieval_threshold: number;
+};
+
 export const knowledgeBaseService = {
 	getAllRecords: () => api.get<{ records: AdrRecord[] }>("/knowledge-base"),
 	getRecord: (source: string) => api.get(`knowledge-base/${source}`),
@@ -34,6 +63,15 @@ export const knowledgeBaseService = {
 	// Create a new record from markdown. The backend derives the source key from
 	// the document's H1 title and returns it, then writes to blob + indexes.
 	createDocument: (content: string) => api.post<{ source: string }>("/knowledge-base", { content }),
+
+	// Which ADRs a coding task would retrieve, with every candidate's score and why it
+	// was kept or dropped. Goes through the same ranking agents get. Passing a threshold
+	// evaluates at that value without saving it, so one can be tried before committing.
+	searchPreview: (query: string, retrievalThreshold?: number | null) =>
+		api.post<SearchPreview>("/knowledge-base/search-preview", {
+			query,
+			retrieval_threshold: retrievalThreshold ?? null,
+		}),
 
 	// Save an edit to a known record. The backend treats the document's H1 as
 	// authoritative, so changing the title renames the record — the returned `source` is
@@ -64,3 +102,13 @@ export const reviewService = {
 	reviewDocument: (content: string) =>
 		api.post<{ findings: ReviewFinding[]; llm_ok: boolean }>("/knowledge-base/adr-review", { content }),
 };
+
+// Team-level settings, stored in the blob bucket alongside the ADRs.
+export const settingsService = {
+	getSettings: () => api.get<Settings>("/settings"),
+
+	// null clears the saved value, falling back to the server's default. Applies
+	// immediately — agents get the new threshold on their next search, no restart.
+	saveRetrievalThreshold: (retrievalThreshold: number | null) =>
+		api.put<Settings>("/settings", { retrieval_threshold: retrievalThreshold }),
+} as const;

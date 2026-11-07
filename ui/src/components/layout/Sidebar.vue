@@ -21,13 +21,25 @@
 				<li>
 					<router-link
 						v-tooltip.right="collapsed ? 'Knowledge Base' : ''"
-						:to="ROUTES.default"
+						:to="ROUTES.knowledgeBase"
 						class="flex items-center gap-3 py-3 no-underline hover:bg-slate-100 transition-colors duration-300"
 						:class="collapsed ? 'justify-center px-0' : 'px-5'"
 						active-class="bg-slate-200 text-slate-900 font-semibold"
 					>
 						<Icon icon="mdi:book-open-variant" width="20" height="20" class="shrink-0" />
 						<span v-if="!collapsed" class="whitespace-nowrap">Knowledge Base</span>
+					</router-link>
+				</li>
+				<li>
+					<router-link
+						v-tooltip.right="collapsed ? 'Search Tuning' : ''"
+						:to="ROUTES.searchTuning"
+						class="flex items-center gap-3 py-3 no-underline hover:bg-slate-100 transition-colors duration-300"
+						:class="collapsed ? 'justify-center px-0' : 'px-5'"
+						active-class="bg-slate-200 text-slate-900 font-semibold"
+					>
+						<Icon icon="mdi:tune-variant" width="20" height="20" class="shrink-0" />
+						<span v-if="!collapsed" class="whitespace-nowrap">Search Tuning</span>
 					</router-link>
 				</li>
 			</ul>
