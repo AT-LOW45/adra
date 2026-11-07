@@ -165,11 +165,27 @@ Ask your agent for code as usual. You don't need to mention Adra or ADRs. The ag
 | `search_adrs(query)` | Returns the ADRs relevant to a coding task, each in full. When none apply, it says so, and the agent writes code following the existing codebase. |
 | `list_adrs()` | Lists every ADR in the knowledge base as `{source, adr_id, title}`. |
 
-To make sure an agent checks the ADRs, add a line to your project's `CLAUDE.md` (or your agent's equivalent):
+### Telling your agent to use Adra
+
+Adra's MCP server already asks agents to check the ADRs, and clients that honour server
+instructions put that in the agent's system prompt. Repeating it in your project's own
+agent instructions file makes it considerably more reliable, and costs one line.
+
+Each agent reads a different file from the repository root:
+
+| Agent | File |
+|-------|------|
+| Claude Code | `CLAUDE.md` |
+| Codex | `AGENTS.md` |
+
+Add this to whichever applies:
 
 ```markdown
-Before writing or changing code, call the `adra` MCP server's `search_adrs` tool and follow the ADRs it returns.
+Before making or suggesting code changes, call the `adra` MCP server's `search_adrs` tool and follow the ADRs it returns.
 ```
+
+Commit the file, and everyone on the team gets the same behaviour without configuring
+anything themselves.
 
 **Checking whether the agent used Adra:** tool calls appear in the agent's session, and the backend logs each one:
 
