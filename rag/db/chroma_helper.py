@@ -118,10 +118,19 @@ def _assemble_source(source: str) -> str:
     return "\n\n".join(doc for _, doc in pairs)
 
 
+# An ADR must score at least this to be returned. 0.58 separated coding tasks the ADRs
+# cover (correct ADR at 0.60+) from tasks they don't, e.g. "parse a CSV line" (0.56 or
+# below) -- 0.5 let most of the latter through. Scores depend on the embedding model and
+# on the team's ADRs, so it is overridable; scripts/calibrate_threshold.py suggests a value.
+# This is only the default: a value saved from the UI wins (service/settings_service.py),
+# and callers pass that in, since this db layer must not import from the service layer.
+SCORE_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.58"))
+
+
 async def search_index(
     query: str,
     candidate_k: int = 36,
-    score_threshold: float = 0.5,
+    score_threshold: float = SCORE_THRESHOLD,
     max_sources: int = 3,
 ) -> str:
     """

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.logging import DefaultFormatter
-from router import boilerplate, knowledge_base, draft, system
+from router import boilerplate, knowledge_base, draft, settings, system
 from router.mcp_tools import mcp
 
 # App logs go through a dedicated "adra" logger rather than the root logger: configuring
@@ -63,6 +63,7 @@ app.add_middleware(
 app.include_router(draft.router)
 app.include_router(knowledge_base.router)
 app.include_router(boilerplate.router)
+app.include_router(settings.router)
 app.include_router(system.router)
 # Added as routes, not mounted at /mcp: a mount only matches "/mcp/", and the redirect from
 # "/mcp" breaks clients that POST to the bare URL. Must come before the catch-all UI mount.
