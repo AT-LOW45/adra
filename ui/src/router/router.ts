@@ -38,6 +38,11 @@ const routes: CreateRouterRoutes = [
 				name: "ADRConfig",
 				component: () => import("@/pages/AdrConfigPage.vue"),
 			},
+			{
+				path: ROUTES.searchTuning,
+				name: "SearchTuning",
+				component: () => import("@/pages/SearchTuningPage.vue"),
+			},
 		],
 	},
 ];
