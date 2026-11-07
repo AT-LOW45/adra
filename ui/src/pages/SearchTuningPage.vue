@@ -79,8 +79,11 @@
 				it if relevant ADRs are being missed.
 			</p>
 
-			<div class="flex items-center gap-4">
-				<Slider v-model="draftThreshold" :min="0" :max="1" :step="0.01" class="flex-1" />
+			<!-- max-w-xl: a 0-1 slider gains nothing from spanning a wide screen, and the
+			     longer the track the coarser each pixel of drag is. min-w-0 lets the slider
+			     shrink instead of pushing the number input past the card edge. -->
+			<div class="flex items-center gap-4 max-w-xl">
+				<Slider v-model="draftThreshold" :min="0" :max="1" :step="0.01" class="flex-1 min-w-0" />
 				<InputNumber
 					v-model="draftThreshold"
 					:min="0"
@@ -89,7 +92,6 @@
 					:min-fraction-digits="2"
 					:max-fraction-digits="2"
 					show-buttons
-					class="w-36"
 				/>
 			</div>
 
