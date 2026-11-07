@@ -21,7 +21,7 @@
 				<li>
 					<router-link
 						v-tooltip.right="collapsed ? 'Knowledge Base' : ''"
-						:to="ROUTES.default"
+						:to="ROUTES.knowledgeBase"
 						class="flex items-center gap-3 py-3 no-underline hover:bg-slate-100 transition-colors duration-300"
 						:class="collapsed ? 'justify-center px-0' : 'px-5'"
 						active-class="bg-slate-200 text-slate-900 font-semibold"
