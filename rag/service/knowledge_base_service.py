@@ -10,6 +10,8 @@ from db.chroma_helper import (
     get_adr_id,
     get_chunks,
     delete_from_index,
+    rank_sources,
+    MAX_SOURCES,
 )
 from exception.source_error import DuplicateSourceError, SourceDerivationError
 from storage.blob_storage import upload_to_blob, get_from_blob, delete_from_blob
@@ -234,3 +236,20 @@ def clear_documents() -> list[str]:
     for source in sources:
         delete_document(source)
     return sources
+
+
+async def search_preview(query: str, score_threshold: float) -> dict:
+    """What search_adrs would return for a task, with every candidate's score.
+
+    Goes through the same rank_sources call the agent's search does, so the page
+    cannot show one outcome while agents get another. Returns the threshold it was
+    evaluated at, since that is what the scores have to be read against, and the cap,
+    so a caller re-deciding outcomes locally doesn't have to hardcode its own copy.
+    """
+    candidates = await rank_sources(query, score_threshold=score_threshold)
+    return {
+        "query": query,
+        "retrieval_threshold": score_threshold,
+        "max_sources": MAX_SOURCES,
+        "candidates": candidates,
+    }
