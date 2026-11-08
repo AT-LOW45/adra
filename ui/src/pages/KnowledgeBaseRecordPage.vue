@@ -42,6 +42,13 @@
 					text
 					@click="showFullPreview = !showFullPreview"
 				/>
+				<Button
+					label="Test findability"
+					icon="pi pi-search"
+					severity="secondary"
+					text
+					@click="openFindability"
+				/>
 				<Button label="Download" icon="pi pi-download" severity="secondary" outlined @click="onDownload" />
 				<Button label="Save" icon="pi pi-save" :loading="saving" @click="onSave" />
 			</div>
@@ -131,6 +138,62 @@
 		@submit-anyway="onSubmitAnyway"
 		@navigate="onNavigateToFinding"
 	/>
+
+	<Dialog
+		v-model:visible="findabilityVisible"
+		header="Test findability"
+		modal
+		dismissable-mask
+		:style="{ width: '34rem' }"
+		:breakpoints="{ '960px': '90vw' }"
+	>
+		<p class="text-slate-500 mb-3">
+			Type a coding task this ADR should cover, phrased the way someone would ask an agent.
+		</p>
+		<div class="flex gap-2">
+			<InputText
+				v-model="findabilityQuery"
+				class="flex-1"
+				placeholder="show a loading spinner while saving a form"
+				@keyup.enter="runFindability"
+			/>
+			<Button
+				label="Test"
+				:loading="findabilityLoading"
+				:disabled="!findabilityQuery.trim()"
+				@click="runFindability"
+			/>
+		</div>
+
+		<Message v-if="findabilityError" severity="error" class="mt-3" :closable="false">
+			{{ findabilityError }}
+		</Message>
+
+		<div v-else-if="findabilityResult" class="mt-4">
+			<div class="flex items-baseline gap-3">
+				<span class="text-3xl font-semibold tabular-nums">{{ findabilityResult.score.toFixed(3) }}</span>
+				<Tag
+					:value="findabilityResult.kept ? 'Would be sent' : 'Would NOT be sent'"
+					:severity="findabilityResult.kept ? 'success' : 'warn'"
+				/>
+			</div>
+			<p class="text-slate-500 mt-2">
+				<template v-if="findabilityResult.kept">
+					Clears the {{ findabilityResult.threshold.toFixed(2) }} cutoff, so an agent asking this
+					would be given this ADR.
+				</template>
+				<template v-else-if="findabilityResult.reason === 'over_max_sources'">
+					Clears the {{ findabilityResult.threshold.toFixed(2) }} cutoff, but other ADRs scored
+					higher and filled every slot.
+				</template>
+				<template v-else>
+					Below the {{ findabilityResult.threshold.toFixed(2) }} cutoff, so an agent asking this gets
+					nothing from this ADR. If the task is squarely in its scope, the wording is the problem —
+					open the Search Tuning page for what to do about it.
+				</template>
+			</p>
+		</div>
+	</Dialog>
 </template>
 
 <script setup lang="ts">
@@ -140,7 +203,7 @@ import { AdrDocument, AdrSection, joinAdr, sectionAnchorId, splitAdr } from "@/u
 import { downloadMarkdown } from "@/utils/download-markdown";
 import axios from "axios";
 import { MdEditor, MdPreview } from "md-editor-v3";
-import { Button, Select, useToast } from "primevue";
+import { Button, Dialog, InputText, Message, Select, Tag, useToast } from "primevue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -151,6 +214,53 @@ const toast = useToast();
 const records = ref<any[]>([]);
 const currentRecord = ref<string>("");
 const recordData = ref<any>(null);
+
+const findabilityVisible = ref(false);
+const findabilityQuery = ref("");
+const findabilityLoading = ref(false);
+const findabilityError = ref("");
+const findabilityResult = ref<{
+	score: number;
+	kept: boolean;
+	reason: string | null;
+	threshold: number;
+} | null>(null);
+
+const openFindability = () => {
+	findabilityVisible.value = true;
+};
+
+// Asks the same endpoint the tuning page uses and picks this ADR out of the ranking, so
+// the verdict here and the one there can't disagree. Unsaved edits aren't included: the
+// score comes from what is indexed, which is what an agent would actually be matched on.
+const runFindability = async () => {
+	const query = findabilityQuery.value.trim();
+	if (!query) return;
+	findabilityLoading.value = true;
+	findabilityError.value = "";
+	try {
+		const { data } = await knowledgeBaseService.searchPreview(query);
+		const mine = data.candidates.find((c) => c.source === recordData.value?.source);
+		if (!mine) {
+			findabilityResult.value = null;
+			findabilityError.value = "This ADR didn't appear among the candidates for that task at all.";
+			return;
+		}
+		findabilityResult.value = {
+			score: mine.score,
+			kept: mine.kept,
+			reason: mine.dropped_reason,
+			threshold: data.retrieval_threshold,
+		};
+	} catch (err) {
+		findabilityResult.value = null;
+		findabilityError.value = axios.isAxiosError(err)
+			? (err.response?.data?.detail ?? err.message)
+			: "Could not test this ADR.";
+	} finally {
+		findabilityLoading.value = false;
+	}
+};
 const isLoadingRecord = ref(false);
 const saving = ref(false);
 
