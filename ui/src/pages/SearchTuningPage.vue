@@ -1,12 +1,30 @@
 <template>
 	<div class="p-4">
-		<h1 class="text-2xl font-semibold mb-1">Search Tuning</h1>
-		<p class="text-slate-500 mb-4">
-			See which ADRs a coding task retrieves, and adjust how strict the match has to be.
-		</p>
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<h1 class="text-2xl font-semibold mb-1">Search Tuning</h1>
+				<p class="text-slate-500 mb-4">
+					See which ADRs a coding task retrieves, and adjust how strict the match has to be.
+				</p>
+			</div>
+			<Button
+				label="How to read this"
+				icon="pi pi-question-circle"
+				severity="secondary"
+				text
+				@click="helpVisible = true"
+			/>
+		</div>
 
-		<!-- Test search -->
 		<div class="rounded-md p-5 bg-white shadow-sm">
+			<Tabs value="single">
+				<TabList>
+					<Tab value="single">Test a task</Tab>
+					<Tab value="calibrate">Find the right cutoff</Tab>
+				</TabList>
+				<TabPanels class="!px-0">
+
+				<TabPanel value="single">
 			<label for="task" class="block font-medium mb-2">Test a coding task</label>
 			<div class="flex gap-2">
 				<InputText
@@ -30,7 +48,7 @@
 					existing codebase.
 				</Message>
 
-				<DataTable :value="preview.candidates" row-hover>
+				<DataTable :value="preview.candidates" row-hover class="cursor-pointer" @row-click="openRecord">
 					<template #empty>
 						<span class="text-slate-500">Nothing indexed to match against.</span>
 					</template>
@@ -60,9 +78,106 @@
 
 				<small class="text-slate-500 block mt-2">
 					At most {{ preview.max_sources }} ADRs are ever sent, strongest first, even when more clear
-					the threshold.
+					the threshold. Click a row to open that ADR in a new tab.
 				</small>
 			</div>
+				</TabPanel>
+
+				<TabPanel value="calibrate">
+					<p class="text-slate-500 mb-4">
+						List tasks your ADRs should cover, and tasks they shouldn't. The cutoff belongs between
+						the two — above everything that should match, below everything that shouldn't.
+					</p>
+
+					<div class="grid md:grid-cols-2 gap-4">
+						<div>
+							<label for="genuine" class="block font-medium mb-2">Should match your ADRs</label>
+							<Textarea
+								id="genuine"
+								v-model="genuineText"
+								rows="6"
+								class="w-full"
+								placeholder="add an endpoint to list zones&#10;protect a route with JWT&#10;fetch orders by customer"
+							/>
+						</div>
+						<div>
+							<label for="unrelated" class="block font-medium mb-2">Should match nothing</label>
+							<Textarea
+								id="unrelated"
+								v-model="unrelatedText"
+								rows="6"
+								class="w-full"
+								placeholder="parse a CSV line&#10;reverse a string&#10;sort a list of dicts by a key"
+							/>
+						</div>
+					</div>
+					<small class="text-slate-500 block mt-2">
+						One task per line. The right-hand ones must be real coding tasks, not off-topic text —
+						an agent never asks for a cookie recipe, but it does ask for a CSV parser, and
+						off-topic text scores so low it suggests a cutoff that lets real tasks through.
+					</small>
+
+					<Button
+						label="Suggest a cutoff"
+						class="mt-4"
+						:loading="calibrating"
+						:disabled="!genuineLines.length || !unrelatedLines.length"
+						@click="onCalibrate"
+					/>
+
+					<Message v-if="calibrateError" severity="error" class="mt-3" :closable="false">
+						{{ calibrateError }}
+					</Message>
+
+					<div v-if="calibration" class="mt-5">
+						<div class="grid md:grid-cols-2 gap-4">
+							<div v-for="group in calibrationGroups" :key="group.label">
+								<h3 class="font-medium mb-2">{{ group.label }}</h3>
+								<ul class="list-none p-0 m-0 text-sm">
+									<li
+										v-for="row in group.rows"
+										:key="row.query"
+										class="flex gap-3 py-1 border-b border-slate-100 last:border-0"
+									>
+										<span class="tabular-nums w-14 shrink-0" :class="group.scoreClass(row.score)">
+											{{ row.score === null ? "—" : row.score.toFixed(3) }}
+										</span>
+										<span class="text-slate-600">{{ row.query }}</span>
+									</li>
+								</ul>
+							</div>
+						</div>
+
+						<!-- A missing suggestion is the finding, not an error: the two sets overlap and
+						     no cutoff separates them, which points at the ADRs rather than the number. -->
+						<Message
+							v-if="calibration.suggested_threshold === null"
+							severity="warn"
+							class="mt-4"
+							:closable="false"
+						>
+							These overlap — something that should match scores at or below something that
+							shouldn't, so no single cutoff separates them. Retrieval can't tell these tasks
+							apart. Clearer or more specific ADRs help more than any number here.
+						</Message>
+
+						<div v-else class="mt-4 flex items-center gap-3 flex-wrap">
+							<span class="text-slate-600">
+								Everything that should match is
+								<strong>{{ calibration.floor?.toFixed(3) }}</strong> and above; everything that
+								shouldn't is <strong>{{ calibration.ceiling?.toFixed(3) }}</strong> and below.
+							</span>
+							<Button
+								:label="`Use ${calibration.suggested_threshold.toFixed(2)}`"
+								size="small"
+								@click="useSuggestion"
+							/>
+						</div>
+					</div>
+				</TabPanel>
+
+				</TabPanels>
+			</Tabs>
 		</div>
 
 		<!-- Threshold -->
@@ -128,24 +243,141 @@
 				{{ settingsError }}
 			</Message>
 		</div>
+
+		<Dialog
+			v-model:visible="helpVisible"
+			header="How to read this page"
+			modal
+			dismissable-mask
+			:style="{ width: '46rem' }"
+			:breakpoints="{ '960px': '90vw' }"
+		>
+			<div class="flex flex-col gap-5 text-slate-700 leading-relaxed">
+				<section>
+					<h3 class="font-semibold mb-1">What the scores mean</h3>
+					<p>
+						Each score is how closely a coding task matches an ADR. It runs 0 to 1, but it is
+						<strong>not a percentage</strong> — scores bunch into a narrow band, so an ADR can top
+						the list at 0.59 and still be a poor match. Read the <strong>gap</strong> between
+						scores rather than any single number: a clear drop after the first result means
+						retrieval is confident, while six ADRs within 0.05 of each other means it isn't.
+					</p>
+				</section>
+
+				<section>
+					<h3 class="font-semibold mb-1">Test a task</h3>
+					<p class="mb-2">
+						Phrase it the way you would ask an agent. Every ADR is listed with its score and what
+						would happen to it:
+					</p>
+					<ul class="list-disc pl-5">
+						<li><strong>Sent to agent</strong> — cleared the cutoff and made the top few</li>
+						<li><strong>Below threshold</strong> — didn't score highly enough</li>
+						<li>
+							<strong>Over the cap</strong> — scored highly enough, but stronger ADRs filled every
+							slot
+						</li>
+					</ul>
+				</section>
+
+				<section>
+					<h3 class="font-semibold mb-1">Find the right cutoff</h3>
+					<p>
+						List tasks your ADRs cover and tasks they don't, one per line. The cutoff belongs
+						between the lowest score on the left and the highest on the right. If they overlap,
+						there is no number that works — something that should match scores at or below
+						something that shouldn't, and that is a fact about your ADRs rather than a failed
+						calculation.
+					</p>
+					<p class="mt-2">
+						The right-hand tasks must be <strong>real coding tasks</strong>. An agent never asks for
+						a cookie recipe, but it does ask for a CSV parser; off-topic text scores so low it
+						suggests a cutoff that lets genuine junk through.
+					</p>
+				</section>
+
+				<section>
+					<h3 class="font-semibold mb-1">When something scores wrong, fix the ADR</h3>
+					<p class="mb-2">This is what the page is really for. Two shapes of problem:</p>
+					<p class="mb-2">
+						<strong>A task your ADR covers scores low.</strong> The ADR is hard to find. Usually it
+						is written in the vocabulary of its <em>solution</em> rather than the <em>problem</em>.
+						A real example from the sample ADRs: one about async UI feedback scored 0.636 for
+						"show a loading spinner during an async api call" but only 0.550 for "show a loading
+						spinner while saving a form" — the same task. It named its own hook and said "async",
+						but never "form" or "saving". Adding the words someone would actually type, to its
+						Context or Scope, fixes it.
+					</p>
+					<p>
+						<strong>A task no ADR covers scores high.</strong> Something incidental is attracting
+						it, often vocabulary inside a code sample. One sample ADR about endpoint layering
+						pulls in "sort a list of dicts by a key", because its example happens to contain
+						<code>list[dict]</code>.
+					</p>
+				</section>
+
+				<section>
+					<h3 class="font-semibold mb-1">Moving the cutoff is the last resort</h3>
+					<p>
+						Raising it loses genuine matches; lowering it admits junk. When in doubt leave it lower:
+						a spurious ADR is noise the agent can weigh against the task, while a missing one means
+						it writes ungrounded code and nobody finds out.
+					</p>
+				</section>
+			</div>
+		</Dialog>
 	</div>
 </template>
 
 <script setup lang="ts">
-import { knowledgeBaseService, settingsService, type SearchCandidate, type SearchPreview, type Settings } from "@/api-service";
+import {
+	knowledgeBaseService,
+	settingsService,
+	type Calibration,
+	type SearchCandidate,
+	type SearchPreview,
+	type Settings,
+} from "@/api-service";
 import { retrievalThresholdSchema } from "@/schemas/settingsSchema";
 import useZodValidation from "@/composables/useZodValidation";
 import axios from "axios";
-import { Button, Column, DataTable, InputNumber, InputText, Message, Slider, Tag, useToast } from "primevue";
+import {
+	Button,
+	Column,
+	DataTable,
+	Dialog,
+	InputNumber,
+	InputText,
+	Message,
+	Slider,
+	Tab,
+	TabList,
+	TabPanel,
+	TabPanels,
+	Tabs,
+	Tag,
+	Textarea,
+	useToast,
+} from "primevue";
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
 const toast = useToast();
+const router = useRouter();
 const { validate, validationErrors } = useZodValidation(retrievalThresholdSchema);
 
 const query = ref("");
 const preview = ref<SearchPreview | null>(null);
 const searching = ref(false);
 const searchError = ref("");
+
+const helpVisible = ref(false);
+
+const genuineText = ref("");
+const unrelatedText = ref("");
+const calibration = ref<Calibration | null>(null);
+const calibrating = ref(false);
+const calibrateError = ref("");
 
 const settings = ref<Settings | null>(null);
 const draftThreshold = ref(0);
@@ -190,6 +422,45 @@ const keptCandidates = computed(() => (preview.value?.candidates ?? []).filter((
 // is against reality rather than the previous slider position.
 const serverKeptCount = computed(() => (preview.value?.candidates ?? []).filter((c) => c.kept).length);
 
+// One task per line, blanks dropped, so trailing newlines and spacing while typing
+// don't become empty queries the server has to reject.
+const toLines = (text: string) =>
+	text
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+
+const genuineLines = computed(() => toLines(genuineText.value));
+const unrelatedLines = computed(() => toLines(unrelatedText.value));
+
+// Each side is coloured by whether it landed where it should: a "should match" below the
+// floor, or a "shouldn't" above the ceiling, is the one dragging the gap shut.
+const calibrationGroups = computed(() => {
+	const c = calibration.value;
+	if (!c) return [];
+	return [
+		{
+			label: "Should match your ADRs",
+			rows: c.genuine,
+			scoreClass: (score: number | null) =>
+				score !== null && c.floor !== null && score <= c.floor ? "text-amber-600 font-semibold" : "text-slate-700",
+		},
+		{
+			label: "Should match nothing",
+			rows: c.unrelated,
+			scoreClass: (score: number | null) =>
+				score !== null && c.ceiling !== null && score >= c.ceiling ? "text-amber-600 font-semibold" : "text-slate-700",
+		},
+	];
+});
+
+// A new tab rather than navigation: the task and its scores are the reason for opening
+// the ADR, and coming back would mean re-running the search to see them again.
+const openRecord = (event: { data: SearchCandidate }) => {
+	const { href } = router.resolve({ name: "KnowledgeBaseRecord", params: { id: event.data.source } });
+	window.open(href, "_blank", "noopener");
+};
+
 const message = (err: unknown, fallback: string) =>
 	axios.isAxiosError(err) ? (err.response?.data?.detail ?? err.message) : fallback;
 
@@ -217,6 +488,28 @@ const onSearch = async () => {
 		searchError.value = message(err, "Search failed.");
 	} finally {
 		searching.value = false;
+	}
+};
+
+const onCalibrate = async () => {
+	calibrating.value = true;
+	calibrateError.value = "";
+	try {
+		const { data } = await settingsService.calibrate(genuineLines.value, unrelatedLines.value);
+		calibration.value = data;
+	} catch (err) {
+		calibration.value = null;
+		calibrateError.value = message(err, "Could not work out a cutoff.");
+	} finally {
+		calibrating.value = false;
+	}
+};
+
+// Loads the suggestion into the slider without saving it, so it is reviewed against the
+// threshold card's controls rather than applied the moment it is calculated.
+const useSuggestion = () => {
+	if (calibration.value?.suggested_threshold !== null && calibration.value) {
+		draftThreshold.value = calibration.value.suggested_threshold;
 	}
 };
 
