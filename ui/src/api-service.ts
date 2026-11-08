@@ -32,6 +32,21 @@ export type SearchPreview = {
 	candidates: SearchCandidate[];
 };
 
+// One query's deciding score. `score` is null only when nothing is indexed to match against.
+export type CalibrationScore = { query: string; score: number | null };
+
+// `suggested_threshold` is null when `gap` is zero or negative: the two sets overlap and
+// no single cutoff separates them, which is a finding about retrieval rather than a
+// calculation that failed.
+export type Calibration = {
+	genuine: CalibrationScore[];
+	unrelated: CalibrationScore[];
+	floor: number | null;
+	ceiling: number | null;
+	gap: number | null;
+	suggested_threshold: number | null;
+};
+
 // `retrieval_threshold_source` distinguishes a value the team saved from the built-in
 // default, so the UI can offer "reset" only when there is something to reset.
 export type Settings = {
@@ -111,4 +126,9 @@ export const settingsService = {
 	// immediately — agents get the new threshold on their next search, no restart.
 	saveRetrievalThreshold: (retrievalThreshold: number | null) =>
 		api.put<Settings>("/settings", { retrieval_threshold: retrievalThreshold }),
+
+	// Suggests a threshold from tasks the ADRs cover and tasks they deliberately don't.
+	// Suggests only — saving stays a separate, explicit call.
+	calibrate: (genuine: string[], unrelated: string[]) =>
+		api.post<Calibration>("/settings/calibrate", { genuine, unrelated }),
 } as const;
