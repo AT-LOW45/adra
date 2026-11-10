@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "Adra Docs",
-  description: "Documentation site for the setup and usage of Adra",
+  description: "Give coding agents your team's Architecture Decision Records over MCP",
   // Served from https://at-low45.github.io/adra/ — assets need this base path.
   base: "/adra/",
   themeConfig: {
