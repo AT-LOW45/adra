@@ -24,3 +24,6 @@ rag/scripts/record_manager.db
 
 # MCP config holds a GitHub PAT — keep it local, never commit/sync it.
 .mcp.json
+
+# macOS Finder metadata
+.DS_Store
