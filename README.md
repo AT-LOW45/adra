@@ -232,7 +232,6 @@ To run it: open the repo in VS Code and press **F5** to launch an Extension Deve
 ## Contributing & development
 
 - **Contributing guide:** [CONTRIBUTING.md](CONTRIBUTING.md) — branching model, branch naming, and PR conventions.
-- **CI:** GitHub Actions runs Pyright (backend), the UI build, the docs build, and compile/lint for the on-hold extension on every pull request, plus CodeQL/Dependabot/secret scanning. `main` is protected — changes land via pull request.
+- **CI:** GitHub Actions runs Pyright (backend), the UI build, and the docs build on every pull request, plus CodeQL/Dependabot/secret scanning. `main` is protected — changes land via pull request.
 - **Release:** publishing a GitHub Release builds the backend Docker image and pushes it to GHCR. The extension is no longer built or published on release.
 - **Roadmap & tasks:** [GitHub Issues](https://github.com/AT-LOW45/adra/issues)
-- [CHANGELOG.md](CHANGELOG.md) — user-facing release notes

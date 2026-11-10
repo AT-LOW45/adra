@@ -63,7 +63,7 @@ npm test             # compile + lint (pretest) then vscode-test on out/test/**/
 ```
 Tests are Mocha via `@vscode/test-cli` (config in `.vscode-test.mjs`) and run against **compiled JS in `out/`**, so compile first.
 
-**Docker / release:** the root `Dockerfile` builds the backend image (UI built in a Node stage, embedding model built into the image, CPU-only PyTorch). Publishing a GitHub Release pushes it to GHCR for amd64 and arm64 (`.github/workflows/release.yml`). The extension is no longer built or published on release. CI (`ci.yml`) runs Pyright, the UI build, the docs build and extension compile/lint on PRs.
+**Docker / release:** the root `Dockerfile` builds the backend image (UI built in a Node stage, embedding model built into the image, CPU-only PyTorch). Publishing a GitHub Release pushes it to GHCR for amd64 and arm64 (`.github/workflows/release.yml`). The extension is no longer built or published on release. CI (`ci.yml`) runs Pyright, the UI build and the docs build on PRs; the extension is no longer checked.
 
 ## Backend architecture (`rag/`)
 
@@ -102,4 +102,4 @@ Vue 3 `<script setup>`, vue-router, PrimeVue components, Tailwind v4 (via `@tail
 - **No shared type contract over HTTP.** When you change a REST request/response shape, update **both** the Pydantic schema in `rag/schema/` and its TS caller (`ui/src/api-service.ts`, or the extension).
 - **No authentication** on REST or MCP. Keep the backend on a trusted network.
 - CORS in `server.py` allows only the Vite dev ports (`:5173`/`:5174`) and `127.0.0.1:8000`. Production is same-origin.
-- Roadmap and tasks live in **GitHub Issues** (`AT-LOW45/adra`); `CHANGELOG.md` holds user-facing release notes. (There was a `DEVLOG.md` engineering journal — retired in favour of Issues + git history; recover from git history if needed.)
+- Roadmap and tasks live in **GitHub Issues** (`AT-LOW45/adra`); release notes go on GitHub Releases. (There was a `DEVLOG.md` engineering journal — retired in favour of Issues + git history; recover from git history if needed.)
