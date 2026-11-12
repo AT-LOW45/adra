@@ -105,7 +105,9 @@ or **Upload Document** to add an ADR you already have as a markdown file.
 
 Agents follow ADRs closely, so write rules precisely. Say what to do, and include a
 correct and an incorrect example. A rule that differs from your existing code works, as
-long as the ADR says so explicitly.
+long as the ADR says so explicitly. Agents also take file paths literally: an ADR that
+names `src/schemas/api_response.py` gets that exact file, even if that means
+restructuring a module.
 
 ## 4. Connect Claude Code
 

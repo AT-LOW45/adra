@@ -8,7 +8,7 @@ Adra makes a team's **Architecture Decision Records (ADRs)** available to coding
 
 **Current focus is the MCP integration** ([#24](https://github.com/AT-LOW45/adra/issues/24)). The VS Code extension, which generated code itself, is **on hold**: it still works, but it isn't being developed or published. Don't put work into it unless asked.
 
-Read `README.md` for the product-level overview, agent setup and retrieval design; this file covers the operational/architectural details needed to work in the code.
+`README.md` is a short overview that points to the docs site (`docs-site/`, published at https://at-low45.github.io/adra/) for setup and agent configuration; `CONTRIBUTING.md` has the project layout and retrieval design. This file covers the operational/architectural details needed to work in the code.
 
 ## Git & pull requests — ASK FIRST
 

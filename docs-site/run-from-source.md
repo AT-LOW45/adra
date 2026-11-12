@@ -80,6 +80,23 @@ The backend refuses to start if `LLM_API_KEY` is missing, if a `BLOB_*` value is
 missing, or if the bucket can't be reached, and says which. Left unchecked, missing
 storage would look like an empty knowledge base rather than a setup problem.
 
+::: tip Windows: "An Application Control policy has blocked this file"
+Windows' Smart App Control can refuse to load the compiled parts of Python packages
+such as `grpcio`, even ones that loaded fine before. Run the backend in
+[WSL](https://learn.microsoft.com/windows/wsl/install) instead, where Linux packages
+aren't checked. With uv installed in WSL, from the repository root:
+
+```bash
+cd rag
+UV_PROJECT_ENVIRONMENT=$HOME/.venvs/adra WATCHFILES_FORCE_POLLING=true uv run python main.py
+```
+
+`UV_PROJECT_ENVIRONMENT` keeps the Linux packages apart from the Windows `rag/.venv`,
+and `WATCHFILES_FORCE_POLLING` makes reload notice files saved from Windows. Open the
+knowledge base from Windows at http://localhost:8000 as usual. Don't run the Windows and
+WSL backends at the same time, since both use the same index.
+:::
+
 ## Choose an LLM provider
 
 Adra uses an LLM only to review ADRs in the knowledge base. Agents searching ADRs over
