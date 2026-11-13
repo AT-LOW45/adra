@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from schema.settings_schema import CalibrateRequest, UpdateSettingsRequest
-from service.settings_service import calibrate, get_settings, update_settings
+from service.settings_service import calibrate, get_settings, save_retrieval_threshold
 
 # Team-level settings, stored in the blob bucket so they are backed up with the ADRs.
 router = APIRouter(prefix="/settings", tags=["Settings"])
@@ -16,7 +16,7 @@ async def get_settings_endpoint():
 @router.put("")
 async def update_settings_endpoint(request: UpdateSettingsRequest):
     """Save settings. They apply immediately, with no restart."""
-    return JSONResponse(content=update_settings(request.retrieval_threshold))
+    return JSONResponse(content=save_retrieval_threshold(request.retrieval_threshold))
 
 
 @router.post("/calibrate")

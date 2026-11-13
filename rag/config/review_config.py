@@ -1,8 +1,8 @@
 from schema.knowledgebase_schema import SectionSpec
 
-# The default ADR format. When per-KB ADR-format config lands, this becomes the fallback
-# and review_adr accepts a caller-supplied catalog in its place — the review checks consume
-# whatever catalog they're handed, so they don't change.
+# The default ADR format, used until a team saves its own (service/settings_service.py,
+# adr_format()). The review checks consume whatever catalog they're handed, so they don't
+# change when a saved format replaces this.
 DEFAULT_SECTIONS: list[SectionSpec] = [
     {"title": "Status", "required": True, "purpose": "one of Proposed / Accepted / Deprecated / Superseded."},
     {"title": "Scope", "required": True, "purpose": "names a real system or component boundary."},
