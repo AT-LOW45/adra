@@ -55,6 +55,22 @@ export type Settings = {
 	default_retrieval_threshold: number;
 };
 
+// One section of the team's ADR format. `purpose` tells the quality review what the
+// section is for; empty means the review judges it by its heading.
+export type AdrSection = {
+	title: string;
+	purpose: string;
+	required: boolean;
+};
+
+// `source` distinguishes a format the team saved from the built-in default, so the UI
+// can offer "reset" only when there is something to reset.
+export type AdrFormat = {
+	sections: AdrSection[];
+	source: "saved" | "default";
+	default_sections: AdrSection[];
+};
+
 export const knowledgeBaseService = {
 	getAllRecords: () => api.get<{ records: AdrRecord[] }>("/knowledge-base"),
 	getRecord: (source: string) => api.get(`knowledge-base/${source}`),
@@ -131,4 +147,12 @@ export const settingsService = {
 	// Suggests only — saving stays a separate, explicit call.
 	calibrate: (genuine: string[], unrelated: string[]) =>
 		api.post<Calibration>("/settings/calibrate", { genuine, unrelated }),
+
+	getAdrFormat: () => api.get<AdrFormat>("/settings/adr-format"),
+
+	// null deletes the saved format, going back to the default sections. Existing ADRs
+	// aren't changed; the format drives the Create form and the quality review. A 422
+	// carries a message for formats the server rejects, such as duplicate titles.
+	saveAdrFormat: (sections: AdrSection[] | null) =>
+		api.put<AdrFormat>("/settings/adr-format", { sections }),
 } as const;

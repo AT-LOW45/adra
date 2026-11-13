@@ -106,6 +106,16 @@ def adr_format_is_saved() -> bool:
     return _load(ADR_FORMAT_KEY).get("sections") is not None
 
 
+def get_adr_format_settings() -> dict:
+    """The format in use, whether it was saved or is the default, and the default itself,
+    so the UI can offer a reset only when there is something to reset."""
+    return {
+        "sections": adr_format(),
+        "source": "saved" if adr_format_is_saved() else "default",
+        "default_sections": [dict(s) for s in DEFAULT_SECTIONS],
+    }
+
+
 def validate_adr_format(sections: list[SectionSpec]) -> list[SectionSpec]:
     """Normalize a format and reject one the review couldn't use. Raises ValueError.
 
@@ -134,10 +144,10 @@ def validate_adr_format(sections: list[SectionSpec]) -> list[SectionSpec]:
     return normalized
 
 
-def save_adr_format(sections: list[SectionSpec] | None) -> list[SectionSpec]:
+def save_adr_format(sections: list[SectionSpec] | None) -> dict:
     """Save the ADR format, or clear it (None) to go back to DEFAULT_SECTIONS. Applies at once.
 
-    Returns the format now in use.
+    Returns the same shape as get_adr_format_settings.
     """
     if sections is None:
         delete_settings_from_blob(ADR_FORMAT_KEY)
@@ -147,7 +157,7 @@ def save_adr_format(sections: list[SectionSpec] | None) -> list[SectionSpec]:
         normalized = validate_adr_format(sections)
         _write(ADR_FORMAT_KEY, {"sections": normalized})
         logger.info("adr_format saved with %d sections", len(normalized))
-    return adr_format()
+    return get_adr_format_settings()
 
 
 async def _top_score(query: str) -> float | None:

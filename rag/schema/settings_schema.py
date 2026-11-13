@@ -34,3 +34,34 @@ class CalibrateRequest(BaseModel):
             "far lower and suggests a threshold that lets real tasks through."
         ),
     )
+
+
+class AdrSection(BaseModel):
+    """One section of the team's ADR format."""
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="The section's `## ` heading, e.g. 'Decision'.",
+    )
+    purpose: str = Field(
+        default="",
+        max_length=500,
+        description=(
+            "What the section is for, used by the quality review to judge whether its "
+            "content does its job. Left empty, the review judges it by its heading."
+        ),
+    )
+    required: bool = Field(
+        default=False,
+        description="Whether the review reports an error when the section is missing or empty.",
+    )
+
+
+class UpdateAdrFormatRequest(BaseModel):
+    # None deletes the saved format, going back to the default sections.
+    sections: list[AdrSection] | None = Field(
+        ...,
+        description="The sections, in the order an ADR has them, or null to use the default.",
+    )
