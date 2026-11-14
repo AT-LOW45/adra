@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -58,6 +58,34 @@ class AdrSection(BaseModel):
         description="Whether the review reports an error when the section is missing or empty.",
     )
 
+    @field_validator("title", "purpose")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        """Trim before anything else looks at it.
+
+        min_length alone lets "   " through, which then becomes a blank heading and,
+        keyed by its trimmed title, collides with any other blank one.
+        """
+        return value.strip()
+
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: str) -> str:
+        if not value:
+            raise ValueError("A section title is required.")
+        return value
+
+    @field_validator("title")
+    @classmethod
+    def _title_leading_capital(cls, value: str) -> str:
+        """Uppercase the first character so headings look consistent however they were typed.
+
+        Only the first character: str.capitalize() lowercases the rest, which would turn
+        "API Conventions" into "Api conventions". A title starting with a digit or symbol
+        is left as it is, since upper() is a no-op there.
+        """
+        return value[:1].upper() + value[1:]
+
 
 class UpdateAdrFormatRequest(BaseModel):
     # None deletes the saved format, going back to the default sections.
@@ -65,3 +93,22 @@ class UpdateAdrFormatRequest(BaseModel):
         ...,
         description="The sections, in the order an ADR has them, or null to use the default.",
     )
+
+    @model_validator(mode="after")
+    def _no_duplicate_titles(self) -> "UpdateAdrFormatRequest":
+        """Reject two sections whose titles differ only by case or surrounding space.
+
+        The review matches an ADR's headings to sections ignoring case, and the create
+        form keys a section's content by its lowercased title, so near-duplicates are
+        indistinguishable downstream: one section's text silently lands in the other.
+        The format page already blocks this, but the API is reachable without it.
+        """
+        if self.sections is None:
+            return self
+        seen: set[str] = set()
+        for section in self.sections:
+            key = section.title.lower()
+            if key in seen:
+                raise ValueError(f"Two sections are titled {section.title!r}.")
+            seen.add(key)
+        return self
