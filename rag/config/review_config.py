@@ -8,6 +8,7 @@ DEFAULT_SECTIONS: list[SectionSpec] = [
     {"title": "Scope", "required": True, "purpose": "names a real system or component boundary."},
     {"title": "Context", "required": False, "purpose": "describes the actual situation or problem that motivated the decision."},
     {"title": "Decision", "required": True, "purpose": "states a concrete decision — what was chosen (ideally why)."},
+    {"title": "Implementation", "required": False, "purpose": "shows how the decision is applied in code, e.g. correct and incorrect examples."},
     {"title": "Consequences", "required": False, "purpose": "describes real outcomes or trade-offs."},
 ]
 

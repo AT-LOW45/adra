@@ -22,124 +22,135 @@
 			</div>
 		</div>
 
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+		<div v-if="formatLoading" class="rounded-xl border border-slate-200 dark:border-surface-700 p-10 text-center text-slate-500">
+			Loading the ADR format…
+		</div>
+
+		<!-- No fallback to built-in defaults: creating an ADR needs the backend anyway, and
+		     guessing the format would produce ADRs in the wrong shape. -->
+		<div
+			v-else-if="formatError"
+			class="rounded-xl border border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30 p-6 flex flex-col items-start gap-3"
+		>
+			<p class="text-rose-700 dark:text-rose-300">{{ formatError }}</p>
+			<Button label="Retry" icon="pi pi-refresh" severity="secondary" @click="retryFormat" />
+		</div>
+
+		<div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 			<!-- LEFT: form -->
 			<div class="flex flex-col gap-7">
-				<!-- Overview -->
-				<section class="flex flex-col gap-4">
-					<h2 class="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-slate-400">
-						<i class="pi pi-info-circle text-xs" />
-						Overview
-					</h2>
+				<FormField label="Title" required :error-message="validationErrors?.properties?.title?.errors">
+					<InputText v-model="form.title" placeholder="e.g. API authentication strategy" fluid />
+				</FormField>
 
-					<FormField label="Title" required :error-message="validationErrors?.properties?.title?.errors">
-						<InputText v-model="form.title" placeholder="e.g. API authentication strategy" fluid />
+				<!-- One field per section, in format order. The three titles below keep their
+				     own widgets; everything else, a team's own sections included, gets an editor. -->
+				<div v-for="(section, i) in format" :key="section.title" :id="'adr-field-section-' + i">
+					<FormField
+						v-if="keyOf(section) === STATUS_KEY"
+						:label="section.title"
+						:required="section.required"
+						:tip="tipFor(section)"
+						:error-message="errorsFor(section)"
+					>
+						<Select v-model="form.status" :options="statusOptions" placeholder="Select status" fluid />
 					</FormField>
 
-					<div class="grid grid-cols-2 gap-3">
-						<FormField id="adr-field-status" label="Status" required :error-message="validationErrors?.properties?.status?.errors">
-							<Select v-model="form.status" :options="statusOptions" placeholder="Select status" fluid />
-						</FormField>
+					<div v-else-if="keyOf(section) === DECISION_KEY" class="flex flex-col gap-4">
 						<FormField
-							id="adr-field-scope" label="Scope"
-							required
-							:tip="{ message: 'The system or component boundary this applies to.' }"
-							:error-message="validationErrors?.properties?.scope?.errors"
+							:label="section.title"
+							:required="section.required"
+							:tip="tipFor(section, 'Supports code blocks — use the </> button for fenced code.')"
+							:error-message="errorsFor(section)"
 						>
-							<InputText v-model="form.scope" placeholder="e.g. Backend API" fluid />
+							<MdEditor
+								v-model="form.sections[keyOf(section)]"
+								:theme="isDark ? 'dark' : 'light'"
+								:preview="false"
+								:toolbars="mdToolbars"
+								:footers="[]"
+								language="en-US"
+								placeholder="State the decision clearly. What was chosen and why?"
+								style="height: 220px"
+							/>
+						</FormField>
+
+						<FormField label="Alternatives considered">
+							<div class="flex gap-2">
+								<InputText
+									v-model="alternativeInput"
+									placeholder="Add an alternative..."
+									class="flex-1"
+									@keydown.enter.prevent="addAlternative"
+								/>
+								<Button icon="pi pi-plus" severity="secondary" aria-label="Add alternative" @click="addAlternative" />
+							</div>
+							<div v-if="form.alternatives.length" class="flex flex-wrap gap-1.5 mt-2">
+								<Chip v-for="(alt, j) in form.alternatives" :key="j" :label="alt" removable @remove="form.alternatives.splice(j, 1)" />
+							</div>
+						</FormField>
+
+						<FormField label="Related ADRs" :tip="{ message: 'Existing records in the knowledge base that this decision relates to.' }">
+							<MultiSelect
+								v-model="form.relatedAdrs"
+								:options="relatedAdrChoices"
+								:loading="loadingRelatedAdrs"
+								placeholder="Select related ADRs"
+								display="chip"
+								filter
+								:show-toggle-all="false"
+								empty-message="No other ADRs yet"
+								empty-filter-message="No match"
+								fluid
+							/>
 						</FormField>
 					</div>
 
-					<FormField id="adr-field-context" label="Context">
-						<Textarea
-							v-model="form.context"
-							placeholder="Describe the situation and why a decision was needed..."
-							:auto-resize="true"
-							rows="4"
-							fluid
-						/>
-					</FormField>
-				</section>
-
-				<!-- Decision -->
-				<section class="flex flex-col gap-4">
-					<h2 class="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-slate-400">
-						<i class="pi pi-lightbulb text-xs" />
-						Decision
-					</h2>
-
-					<FormField
-						id="adr-field-decision" label="Decision"
-						required
-						:tip="{ message: 'Supports code blocks — use the </> button for fenced code.' }"
-						:error-message="validationErrors?.properties?.decision?.errors"
-					>
-						<MdEditor
-							v-model="form.decision"
-							:theme="isDark ? 'dark' : 'light'"
-							:preview="false"
-							:toolbars="mdToolbars"
-							:footers="[]"
-							language="en-US"
-							placeholder="State the decision clearly. What was chosen and why?"
-							style="height: 220px"
-						/>
-					</FormField>
-
-					<FormField label="Alternatives considered">
-						<div class="flex gap-2">
-							<InputText
-								v-model="alternativeInput"
-								placeholder="Add an alternative..."
-								class="flex-1"
-								@keydown.enter.prevent="addAlternative"
+					<div v-else-if="keyOf(section) === CONSEQUENCES_KEY" class="flex flex-col gap-4">
+						<FormField
+							:label="section.title"
+							:required="section.required"
+							:tip="tipFor(section)"
+							:error-message="errorsFor(section)"
+						>
+							<Textarea
+								v-model="form.positiveConsequences"
+								placeholder="What improves as a result of this decision?"
+								:auto-resize="true"
+								rows="3"
+								fluid
 							/>
-							<Button icon="pi pi-plus" severity="secondary" aria-label="Add alternative" @click="addAlternative" />
-						</div>
-						<div v-if="form.alternatives.length" class="flex flex-wrap gap-1.5 mt-2">
-							<Chip v-for="(alt, i) in form.alternatives" :key="i" :label="alt" removable @remove="form.alternatives.splice(i, 1)" />
-						</div>
-					</FormField>
-
-					<FormField label="Related ADRs" :tip="{ message: 'Existing records in the knowledge base that this decision relates to.' }">
-						<MultiSelect
-							v-model="form.relatedAdrs"
-							:options="relatedAdrChoices"
-							:loading="loadingRelatedAdrs"
-							placeholder="Select related ADRs"
-							display="chip"
-							filter
-							:show-toggle-all="false"
-							empty-message="No other ADRs yet"
-							empty-filter-message="No match"
-							fluid
-						/>
-					</FormField>
-				</section>
-
-				<!-- Implementation -->
-				<section class="flex flex-col gap-4">
-					<h2 class="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-slate-400">
-						<i class="pi pi-code text-xs" />
-						Implementation
-					</h2>
+						</FormField>
+						<FormField label="Trade-offs">
+							<Textarea
+								v-model="form.negativeConsequences"
+								placeholder="What gets harder, slower, or more complex?"
+								:auto-resize="true"
+								rows="3"
+								fluid
+							/>
+						</FormField>
+					</div>
 
 					<FormField
-						id="adr-field-implementation" label="Implementation"
-						:tip="{ message: 'Code examples, exception classes, response shapes. Use the </> button for fenced code blocks.' }"
+						v-else
+						:label="section.title"
+						:required="section.required"
+						:tip="tipFor(section)"
+						:error-message="errorsFor(section)"
 					>
 						<MdEditor
-							v-model="form.implementation"
+							v-model="form.sections[keyOf(section)]"
 							:theme="isDark ? 'dark' : 'light'"
 							:preview="false"
 							:toolbars="mdToolbars"
 							:footers="[]"
 							language="en-US"
-							placeholder="Show how the decision is implemented — e.g. code examples, correct vs incorrect usage..."
-							style="height: 340px"
+							:placeholder="`Write the ${section.title.toLowerCase()} section...`"
+							style="height: 200px"
 						/>
 					</FormField>
-				</section>
+				</div>
 
 				<!-- Custom sections -->
 				<section class="flex flex-col gap-4">
@@ -190,47 +201,6 @@
 
 					<Button label="Add section" icon="pi pi-plus" severity="secondary" outlined class="self-start" @click="addCustomSection" />
 				</section>
-
-				<!-- Consequences -->
-				<section class="flex flex-col gap-4">
-					<h2 class="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-slate-400">
-						<i class="pi pi-arrows-h text-xs" />
-						Consequences
-					</h2>
-
-					<FormField id="adr-field-consequences" label="Positive consequences">
-						<Textarea
-							v-model="form.positiveConsequences"
-							placeholder="What improves as a result of this decision?"
-							:auto-resize="true"
-							rows="3"
-							fluid
-						/>
-					</FormField>
-
-					<FormField label="Negative consequences / trade-offs">
-						<Textarea
-							v-model="form.negativeConsequences"
-							placeholder="What gets harder, slower, or more complex?"
-							:auto-resize="true"
-							rows="3"
-							fluid
-						/>
-					</FormField>
-
-					<FormField id="adr-field-notes" label="Notes" :tip="{ message: 'Supports code blocks — use the </> button for fenced code.' }">
-						<MdEditor
-							v-model="form.notes"
-							:theme="isDark ? 'dark' : 'light'"
-							:preview="false"
-							:toolbars="mdToolbars"
-							:footers="[]"
-							language="en-US"
-							placeholder="Implementation details, code snippets, links to docs..."
-							style="height: 200px"
-						/>
-					</FormField>
-				</section>
 			</div>
 
 			<!-- RIGHT: live preview (sticky) -->
@@ -257,6 +227,7 @@
 
 		<!-- Actions (sticky so they're reachable without scrolling to the bottom) -->
 		<div
+			v-if="!formatLoading && !formatError"
 			class="sticky bottom-0 z-10 -mx-5 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-100/95 px-5 py-3 backdrop-blur dark:border-surface-800 dark:bg-surface-900/95"
 		>
 			<Button label="Save draft" severity="secondary" icon="pi pi-save" :loading="savingDraft" :disabled="submitting" @click="saveDraft" />
@@ -292,7 +263,7 @@
 </template>
 
 <script setup lang="ts">
-import { ReviewFinding } from "@/api-service";
+import type { AdrSection, ReviewFinding } from "@/api-service";
 import { computed } from "vue";
 import ReviewFindingsDialog from "@/components/dialog/ReviewFindingsDialog.vue";
 import FormField from "@/components/form/FormField.vue";
@@ -303,6 +274,15 @@ import { Button, Chip, Dialog, InputText, MultiSelect, Select, SelectButton, Tag
 
 const {
 	form,
+	format,
+	formatLoading,
+	formatError,
+	retryFormat,
+	sectionKey,
+	fieldKey,
+	STATUS_KEY,
+	DECISION_KEY,
+	CONSEQUENCES_KEY,
 	alternativeInput,
 	submitting,
 	savingDraft,
@@ -333,23 +313,28 @@ const {
 } = useCreateAdr();
 
 // Map a review finding's section to the form field it came from, so a finding in the
-// dialog can jump to (and highlight) the offending field. Fixed sections map 1:1;
-// custom sections match by heading. Document-level findings (word count, unclosed
-// fence) have no single field, so they aren't navigable.
-const FIXED_SECTION_IDS: Record<string, string> = {
-	Status: "adr-field-status",
-	Scope: "adr-field-scope",
-	Context: "adr-field-context",
-	Decision: "adr-field-decision",
-	Implementation: "adr-field-implementation",
-	Consequences: "adr-field-consequences",
-	Notes: "adr-field-notes",
+// dialog can jump to (and highlight) the offending field. Format sections match by
+// title, ignoring case, the way the review itself matches headings; custom sections
+// match by heading. Document-level findings (word count, unclosed fence) have no
+// single field, so they aren't navigable.
+const keyOf = (section: AdrSection): string => sectionKey(section.title);
+
+const errorsFor = (section: AdrSection): string[] | undefined =>
+	(validationErrors.value?.properties as Record<string, { errors: string[] } | undefined> | undefined)?.[
+		fieldKey(keyOf(section))
+	]?.errors;
+
+const tipFor = (section: AdrSection, fallback?: string) => {
+	const message = section.purpose?.trim() || fallback;
+	return message ? { message } : undefined;
 };
 
 const sectionAnchorId = (section: string): string | null => {
-	if (FIXED_SECTION_IDS[section]) return FIXED_SECTION_IDS[section];
-	const idx = form.value.customSections.findIndex((s) => s.heading.trim() === section);
-	return idx !== -1 ? `adr-field-custom-${idx}` : null;
+	const wanted = section.trim().toLowerCase();
+	const idx = format.value.findIndex((s) => keyOf(s) === wanted);
+	if (idx !== -1) return `adr-field-section-${idx}`;
+	const custom = form.value.customSections.findIndex((s) => s.heading.trim().toLowerCase() === wanted);
+	return custom !== -1 ? `adr-field-custom-${custom}` : null;
 };
 
 // Decorate findings with `navigable` so the dialog makes the mappable ones clickable.
