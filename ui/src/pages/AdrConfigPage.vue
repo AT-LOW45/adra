@@ -35,15 +35,32 @@
 					<span />
 				</div>
 
-				<ol class="list-none p-0 m-0 flex flex-col gap-2">
-					<li
+				<Reorder.Group
+					as="ol"
+					axis="y"
+					v-model:values="sections"
+					class="list-none p-0 m-0 flex flex-col gap-2"
+				>
+					<Reorder.Item
 						v-for="(section, i) in sections"
 						:key="section.key"
-						class="grid grid-cols-1 md:grid-cols-[2rem_minmax(0,14rem)_minmax(0,1fr)_6rem_7rem] gap-3 items-start rounded-lg border border-slate-200 p-3"
+						as="li"
+						:value="section"
+						class="relative grid grid-cols-1 md:grid-cols-[2rem_minmax(0,14rem)_minmax(0,1fr)_6rem_7rem] gap-3 items-start rounded-lg border border-slate-200 p-3 bg-white"
+						:while-drag="{ boxShadow: '0 10px 25px rgba(15, 23, 42, 0.12)' }"
 					>
-						<span class="hidden md:block text-slate-400 font-mono text-sm pt-2.5 text-right">{{ i + 1 }}</span>
+						<span
+							class="hidden md:flex items-center justify-end gap-1 text-slate-400 font-mono text-sm pt-2.5 touch-none"
+							:class="sections.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''"
+						>
+							<i v-if="sections.length > 1" class="pi pi-bars text-xs" />
+							{{ i + 1 }}
+						</span>
 
-						<div class="flex flex-col gap-1">
+						<!-- The whole row is draggable, so every control stops pointerdown from
+						     reaching it. Without this a drag would start on mousedown in a text
+						     field and selecting a word would be impossible. -->
+						<div class="flex flex-col gap-1" @pointerdown.stop>
 							<label :for="`section-title-${section.key}`" class="md:sr-only text-sm text-slate-600">Section title</label>
 							<InputText
 								:id="`section-title-${section.key}`"
@@ -56,7 +73,7 @@
 							<small v-if="rowErrors[i]" class="text-red-600">{{ rowErrors[i] }}</small>
 						</div>
 
-						<div class="flex flex-col gap-1">
+						<div class="flex flex-col gap-1" @pointerdown.stop>
 							<label :for="`section-purpose-${section.key}`" class="md:sr-only text-sm text-slate-600">What it's for</label>
 							<Textarea
 								:id="`section-purpose-${section.key}`"
@@ -69,12 +86,12 @@
 							/>
 						</div>
 
-						<div class="flex items-center gap-2 md:pt-2">
+						<div class="flex items-center gap-2 md:pt-2" @pointerdown.stop>
 							<ToggleSwitch v-model="section.required" :input-id="`section-required-${section.key}`" />
 							<label :for="`section-required-${section.key}`" class="md:sr-only text-sm text-slate-600">Required</label>
 						</div>
 
-						<div class="flex items-center gap-1 md:justify-end">
+						<div class="flex items-center gap-1 md:justify-end" @pointerdown.stop>
 							<Button
 								icon="pi pi-arrow-up"
 								severity="secondary"
@@ -106,8 +123,8 @@
 								@click="remove(i)"
 							/>
 						</div>
-					</li>
-				</ol>
+					</Reorder.Item>
+				</Reorder.Group>
 
 				<Button label="Add section" icon="pi pi-plus" severity="secondary" outlined class="mt-3" @click="add" />
 
@@ -167,6 +184,7 @@
 import { settingsService, type AdrFormat, type AdrSection } from "@/api-service";
 import axios from "axios";
 import { Button, Dialog, InputText, Message, Tag, Textarea, ToggleSwitch, useToast } from "primevue";
+import { Reorder } from "motion-v";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { onBeforeRouteLeave, useRouter } from "vue-router";
 
@@ -246,8 +264,16 @@ const remove = (index: number) => {
 const move = (index: number, offset: -1 | 1) => {
 	const target = index + offset;
 	if (target < 0 || target >= sections.value.length) return;
+	reorder(index, target);
+};
+
+// Splice out and back in rather than swapping. A swap is right for a one-step arrow
+// move but wrong for a drag across several rows, which should slide the rest along.
+const reorder = (from: number, to: number) => {
+	if (from === to) return;
 	const list = sections.value;
-	[list[index], list[target]] = [list[target], list[index]];
+	const [moved] = list.splice(from, 1);
+	list.splice(to, 0, moved);
 };
 
 const discard = () => {
