@@ -31,6 +31,13 @@ export interface AdrForm {
 	customSections: CustomSection[];
 	positiveConsequences: string;
 	negativeConsequences: string;
+	/**
+	 * Each section key's title as written in the format when the draft was saved. Keys are
+	 * lowercased, so this is the only record of a title's capitals ("API Conventions") once
+	 * the format renames or drops it. Written by saveDraft, read and dropped by
+	 * resumeIntoFormat; never part of the live form.
+	 */
+	sectionTitles?: Record<string, string>;
 }
 
 /**
@@ -53,6 +60,17 @@ export const fieldKey = (key: string): string => `s:${key}`;
 
 /** Fields that were their own property before the format became configurable. */
 const LEGACY_SECTION_FIELDS = ["scope", "context", "decision", "implementation", "notes"] as const;
+
+/** Headings for keys whose title wasn't recorded: pre-version drafts, and the widget sections. */
+const KNOWN_TITLES: Record<string, string> = {
+	scope: "Scope",
+	context: "Context",
+	decision: "Decision",
+	implementation: "Implementation",
+	notes: "Notes",
+	status: "Status",
+	consequences: "Consequences",
+};
 
 const statusOptions: string[] = ["Proposed", "Accepted", "Deprecated", "Superseded"];
 
@@ -107,12 +125,15 @@ function emptyForm(): AdrForm {
  * Bring a saved draft up to the current format without losing text.
  *
  * Pre-version drafts kept each section in its own property; those move into `sections`.
- * Then any body whose section is no longer in the format — because the draft predates a
+ * Then any content whose section is no longer in the format — because the draft predates a
  * rename, or the format changed under it — becomes a custom section headed by its old
- * title, so nothing a user typed disappears.
+ * title, so nothing a user typed disappears. That includes what the Status, Decision and
+ * Consequences widgets hold outside `sections`: with their section gone, nothing on the
+ * page shows those fields and nothing writes them into the ADR.
  */
 function resumeIntoFormat(raw: AdrForm, format: AdrSection[]): AdrForm {
-	const draft = normalizeRelatedAdrs({ ...emptyForm(), ...raw });
+	const { sectionTitles = {}, ...rest } = raw;
+	const draft = normalizeRelatedAdrs({ ...emptyForm(), ...rest });
 	const sections: Record<string, string> = { ...(draft.sections ?? {}) };
 
 	if (raw.version !== 2) {
@@ -123,17 +144,63 @@ function resumeIntoFormat(raw: AdrForm, format: AdrSection[]): AdrForm {
 	}
 
 	const known = new Set(format.map((section) => sectionKey(section.title)));
+	// The title as the draft knew it. The last resort only capitalises the first letter:
+	// the key is lowercase, so that's all that can be recovered.
+	const headingFor = (key: string): string =>
+		sectionTitles[key] ?? KNOWN_TITLES[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+
 	const kept: Record<string, string> = {};
-	const orphaned: CustomSection[] = [];
+	const orphaned = new Map<string, CustomSection>();
 	for (const [key, body] of Object.entries(sections)) {
 		if (known.has(key)) {
 			kept[key] = body;
 		} else if (body.trim()) {
-			orphaned.push({ heading: key.charAt(0).toUpperCase() + key.slice(1), body, format: "rich" });
+			orphaned.set(key, { heading: headingFor(key), body, format: "rich" });
 		}
 	}
 
-	return { ...draft, version: 2, sections: kept, customSections: [...draft.customSections, ...orphaned] };
+	// Widget-backed content, moved out the same way when its section left the format.
+	if (!known.has(STATUS_KEY) && draft.status) {
+		orphaned.set(STATUS_KEY, { heading: headingFor(STATUS_KEY), body: draft.status, format: "plain" });
+		draft.status = "";
+	}
+
+	if (!known.has(DECISION_KEY) && (draft.alternatives.length || draft.relatedAdrs.length)) {
+		const parts = [orphaned.get(DECISION_KEY)?.body.trim() ?? ""];
+		if (draft.alternatives.length) {
+			parts.push(["### Alternatives Considered", ...draft.alternatives.map((a) => `- ${a}`)].join("\n"));
+		}
+		if (draft.relatedAdrs.length) {
+			parts.push(["### Related ADRs", ...draft.relatedAdrs.map((source) => `- ${source}`)].join("\n"));
+		}
+		orphaned.set(DECISION_KEY, {
+			heading: headingFor(DECISION_KEY),
+			body: parts.filter(Boolean).join("\n\n"),
+			format: "rich",
+		});
+		draft.alternatives = [];
+		draft.relatedAdrs = [];
+	}
+
+	if (!known.has(CONSEQUENCES_KEY) && (draft.positiveConsequences.trim() || draft.negativeConsequences.trim())) {
+		const parts: string[] = [];
+		if (draft.positiveConsequences.trim()) {
+			parts.push(`### Positive\n${draft.positiveConsequences.trim()}`);
+		}
+		if (draft.negativeConsequences.trim()) {
+			parts.push(`### Trade-offs\n${draft.negativeConsequences.trim()}`);
+		}
+		orphaned.set(CONSEQUENCES_KEY, { heading: headingFor(CONSEQUENCES_KEY), body: parts.join("\n\n"), format: "rich" });
+		draft.positiveConsequences = "";
+		draft.negativeConsequences = "";
+	}
+
+	return {
+		...draft,
+		version: 2,
+		sections: kept,
+		customSections: [...draft.customSections, ...orphaned.values()],
+	};
 }
 
 /**
@@ -276,7 +343,11 @@ export function useCreateAdr() {
 		for (const section of format.value) {
 			const key = sectionKey(section.title);
 			const filled = sectionFilled(key);
-			if (!filled && !section.required) continue;
+			// An optional Decision with no body still carries its alternatives and related
+			// ADRs. Not part of sectionFilled, which also decides whether a required Decision
+			// passes validation, and that needs an actual decision.
+			const hasDecisionExtras = key === DECISION_KEY && (f.alternatives.length > 0 || f.relatedAdrs.length > 0);
+			if (!filled && !hasDecisionExtras && !section.required) continue;
 
 			lines.push(`## ${section.title}`);
 
@@ -491,7 +562,10 @@ export function useCreateAdr() {
 		}
 		savingDraft.value = true;
 		try {
-			await draftService.saveDraft(draftId.value, form.value);
+			// Record each key's title as the format spells it, so a later rename can bring the
+			// text back under its original heading (see AdrForm.sectionTitles).
+			const sectionTitles = Object.fromEntries(format.value.map((s) => [sectionKey(s.title), s.title]));
+			await draftService.saveDraft(draftId.value, { ...form.value, sectionTitles });
 			markPristine();
 			toast.add({ severity: "success", summary: "Draft saved", life: 2000 });
 			return true;
