@@ -13,19 +13,33 @@ export default defineConfig({
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Getting Started', link: '/getting-started' }
+      { text: 'Getting Started', link: '/getting-started' },
+      { text: 'Guides', link: '/guides/' }
     ],
 
-    sidebar: [
-      {
-        text: 'Getting Started',
-        items: [
-          { text: 'Quickstart', link: '/getting-started' },
-          { text: 'Connect your agent', link: '/connect-your-agent' },
-          { text: 'Run from source', link: '/run-from-source' }
-        ]
-      }
-    ],
+    // Keyed by path, so /guides/ is its own section rather than another heading under
+    // the docs: a reader there sees only guides, and the docs reader only the docs.
+    sidebar: {
+      '/guides/': [
+        {
+          text: 'Guides',
+          items: [
+            { text: 'All guides', link: '/guides/' },
+            { text: 'Writing ADRs an agent can find', link: '/guides/writing-findable-adrs' }
+          ]
+        }
+      ],
+      '/': [
+        {
+          text: 'Getting Started',
+          items: [
+            { text: 'Quickstart', link: '/getting-started' },
+            { text: 'Connect your agent', link: '/connect-your-agent' },
+            { text: 'Run from source', link: '/run-from-source' }
+          ]
+        }
+      ]
+    },
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/AT-LOW45/adra' }
