@@ -327,6 +327,16 @@ const missingSections = computed(() => {
  * fixed order and a newly required section belongs where the format says, not at the end.
  */
 const addSection = (title: string): void => {
+	// The placeholder card disappears once the section exists, but only after Vue patches
+	// the DOM — and activate() below mounts a markdown editor, which is slow enough that a
+	// second click can land first. Jumping to the existing section makes this idempotent,
+	// so no amount of clicking produces a duplicate heading.
+	const existing = doc.value.sections.findIndex((section) => headingKey(section.heading) === headingKey(title));
+	if (existing !== -1) {
+		activate(existing);
+		return;
+	}
+
 	const order = format.value.map((section) => headingKey(section.title));
 	const target = order.indexOf(headingKey(title));
 	let insertAt = doc.value.sections.length;
