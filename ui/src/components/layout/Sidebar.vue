@@ -32,6 +32,18 @@
 				</li>
 				<li>
 					<router-link
+						v-tooltip.right="collapsed ? 'ADR Format' : ''"
+						:to="ROUTES.adrConfig"
+						class="flex items-center gap-3 py-3 no-underline hover:bg-slate-100 transition-colors duration-300"
+						:class="collapsed ? 'justify-center px-0' : 'px-5'"
+						active-class="bg-slate-200 text-slate-900 font-semibold"
+					>
+						<Icon icon="mdi:format-list-checks" width="20" height="20" class="shrink-0" />
+						<span v-if="!collapsed" class="whitespace-nowrap">ADR Format</span>
+					</router-link>
+				</li>
+				<li>
+					<router-link
 						v-tooltip.right="collapsed ? 'Search Tuning' : ''"
 						:to="ROUTES.searchTuning"
 						class="flex items-center gap-3 py-3 no-underline hover:bg-slate-100 transition-colors duration-300"

@@ -110,17 +110,24 @@ def list_drafts_from_blob() -> list[tuple[str, str]]:
     return drafts
 
 
-# Team-level settings, as one JSON object at `settings/settings.json`. Kept in the bucket
-# rather than on the data volume so a backup of the bucket (mc mirror, #17) carries them
-# with the ADRs. Like drafts/, the prefix keeps it out of the ADR keys, which never
-# contain a "/" -- anything that lists the bucket to re-index ADRs must skip both.
-SETTINGS_KEY = "settings/settings.json"
+# Team-level settings, one JSON file per area under `settings/`. Kept in the bucket rather
+# than on the data volume so a backup of the bucket (mc mirror, #17) carries them with the
+# ADRs. Like drafts/, the prefix keeps them out of the ADR keys, which never contain a
+# "/" -- anything that lists the bucket to re-index ADRs must skip both.
+#
+# Separate files, so one that fails to parse breaks only its own area: search_adrs needs
+# the retrieval settings on every call and must not depend on the ADR format loading.
+RETRIEVAL_SETTINGS_KEY = "settings/retrieval.json"
+ADR_FORMAT_KEY = "settings/adr_format.json"
+# Where v0.2.0 saved the retrieval settings. Read when retrieval.json doesn't exist yet,
+# and removed on the next save, which writes retrieval.json instead.
+LEGACY_SETTINGS_KEY = "settings/settings.json"
 
 
-def get_settings_from_blob() -> str | None:
-    """The settings JSON string, or None if nothing has been saved yet."""
+def get_settings_from_blob(key: str) -> str | None:
+    """A settings file's JSON string, or None if nothing has been saved there yet."""
     try:
-        response = client.get_object(Bucket=BUCKET, Key=SETTINGS_KEY)
+        response = client.get_object(Bucket=BUCKET, Key=key)
         return response["Body"].read().decode("utf-8")
     except ClientError as error:
         # Only "not saved yet" means use the defaults. Any other failure is raised, so an
@@ -130,13 +137,18 @@ def get_settings_from_blob() -> str | None:
         raise
 
 
-def save_settings_to_blob(content: str) -> None:
+def save_settings_to_blob(key: str, content: str) -> None:
     client.put_object(
         Bucket=BUCKET,
-        Key=SETTINGS_KEY,
+        Key=key,
         Body=content.encode("utf-8"),
         ContentType="application/json",
     )
+
+
+def delete_settings_from_blob(key: str) -> None:
+    """Delete a settings file. Deleting one that doesn't exist is not an error in S3."""
+    client.delete_object(Bucket=BUCKET, Key=key)
 
 
 def upload_to_blob(content: str, source: str) -> None:

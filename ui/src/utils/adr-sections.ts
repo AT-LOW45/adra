@@ -56,8 +56,25 @@ export const splitAdr = (markdown: string): AdrDocument => {
 const reassemble = (s: AdrSection): string =>
 	s.body.length > 0 || s.hadNewline ? `${s.headingLine}\n${s.body}` : s.headingLine;
 
-/** Rebuild the full markdown. `joinAdr(splitAdr(md)) === md` for any input. */
-export const joinAdr = (doc: AdrDocument): string => doc.preamble + doc.sections.map(reassemble).join("");
+/**
+ * Rebuild the full markdown. `joinAdr(splitAdr(md)) === md` for any input.
+ *
+ * A section's text must end with a newline or the next "## " lands on its last line and
+ * stops being a heading, silently merging the two sections. splitAdr keeps trailing
+ * newlines verbatim, so a round-tripped document already satisfies this and the padding
+ * below is a no-op for it — but an edited body comes back from the editor without one,
+ * and a section built by hand may never have had one. Only non-last sections are padded,
+ * so a document whose final section has no trailing newline still round-trips exactly.
+ */
+export const joinAdr = (doc: AdrDocument): string =>
+	doc.preamble +
+	doc.sections
+		.map((section, index) => {
+			const text = reassemble(section);
+			const isLast = index === doc.sections.length - 1;
+			return isLast || text.endsWith("\n") ? text : `${text}\n`;
+		})
+		.join("");
 
 export const sectionSlug = (heading: string): string =>
 	heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

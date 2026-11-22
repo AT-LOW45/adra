@@ -17,7 +17,7 @@ from service.knowledge_base_service import (
     search_preview,
 )
 from service.review_service import review_adr
-from service.settings_service import retrieval_threshold
+from service.settings_service import adr_format, retrieval_threshold
 
 router = APIRouter(prefix="/knowledge-base", tags=["Knowledge Base"])
 
@@ -127,7 +127,8 @@ async def clear_knowledge_base_endpoint():
 
 @router.post("/adr-review")
 async def review_adr_endpoint(content: CreateDocumentRequest):
-    return await review_adr(content.content)
+    """Review an ADR against the team's format (PUT /settings/adr-format)."""
+    return await review_adr(content.content, sections=adr_format())
 
 
 @router.post("/search-preview")

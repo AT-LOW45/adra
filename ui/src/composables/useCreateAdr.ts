@@ -1,7 +1,7 @@
-import { draftService, knowledgeBaseService, ReviewFinding, reviewService } from "@/api-service";
+import { type AdrSection, draftService, knowledgeBaseService, ReviewFinding, reviewService, settingsService } from "@/api-service";
 import useZodValidation from "@/composables/useZodValidation";
 import ROUTES from "@/router/routes";
-import { adrSchema } from "@/schemas/adrSchema";
+import { z } from "zod/v4";
 import axios from "axios";
 import type { ToolbarNames } from "md-editor-v3";
 import { useToast } from "primevue";
@@ -17,21 +17,60 @@ export interface CustomSection {
 }
 
 export interface AdrForm {
+	/** Absent on drafts saved before the format became configurable. */
+	version?: 2;
 	id: string;
-	status: string;
+	/** The "# " heading. Always required, and not a section. */
 	title: string;
-	scope: string;
-	context: string;
-	decision: string;
+	/** Section body, keyed by sectionKey(title). Status and Consequences use their own fields. */
+	sections: Record<string, string>;
+	status: string;
 	alternatives: string[];
 	/** Source keys of existing records, picked from the knowledge base. */
 	relatedAdrs: string[];
-	implementation: string;
 	customSections: CustomSection[];
 	positiveConsequences: string;
 	negativeConsequences: string;
-	notes: string;
+	/**
+	 * Each section key's title as written in the format when the draft was saved. Keys are
+	 * lowercased, so this is the only record of a title's capitals ("API Conventions") once
+	 * the format renames or drops it. Written by saveDraft, read and dropped by
+	 * resumeIntoFormat; never part of the live form.
+	 */
+	sectionTitles?: Record<string, string>;
 }
+
+/**
+ * Section bodies are keyed by the lowercased, trimmed title, matching how the review
+ * compares an ADR's headings to the format. Renaming a section therefore orphans its
+ * body, which resumeIntoFormat turns into a custom section rather than dropping.
+ */
+export const sectionKey = (title: string): string => title.trim().toLowerCase();
+
+/**
+ * Three titles keep purpose-built widgets when the format includes them; everything
+ * else, a team's own sections included, gets a generic markdown editor.
+ */
+export const STATUS_KEY = "status";
+export const DECISION_KEY = "decision";
+export const CONSEQUENCES_KEY = "consequences";
+
+/** Validation keys are prefixed so a section titled "Title" can't shadow the heading field. */
+export const fieldKey = (key: string): string => `s:${key}`;
+
+/** Fields that were their own property before the format became configurable. */
+const LEGACY_SECTION_FIELDS = ["scope", "context", "decision", "implementation", "notes"] as const;
+
+/** Headings for keys whose title wasn't recorded: pre-version drafts, and the widget sections. */
+const KNOWN_TITLES: Record<string, string> = {
+	scope: "Scope",
+	context: "Context",
+	decision: "Decision",
+	implementation: "Implementation",
+	notes: "Notes",
+	status: "Status",
+	consequences: "Consequences",
+};
 
 const statusOptions: string[] = ["Proposed", "Accepted", "Deprecated", "Superseded"];
 
@@ -69,19 +108,98 @@ const mdToolbars: ToolbarNames[] = [
 
 function emptyForm(): AdrForm {
 	return {
+		version: 2,
 		id: "",
-		status: "",
 		title: "",
-		scope: "",
-		context: "",
-		decision: "",
+		sections: {},
+		status: "",
 		alternatives: [],
 		relatedAdrs: [],
-		implementation: "",
 		customSections: [],
 		positiveConsequences: "",
 		negativeConsequences: "",
-		notes: "",
+	};
+}
+
+/**
+ * Bring a saved draft up to the current format without losing text.
+ *
+ * Pre-version drafts kept each section in its own property; those move into `sections`.
+ * Then any content whose section is no longer in the format — because the draft predates a
+ * rename, or the format changed under it — becomes a custom section headed by its old
+ * title, so nothing a user typed disappears. That includes what the Status, Decision and
+ * Consequences widgets hold outside `sections`: with their section gone, nothing on the
+ * page shows those fields and nothing writes them into the ADR.
+ */
+function resumeIntoFormat(raw: AdrForm, format: AdrSection[]): AdrForm {
+	const { sectionTitles = {}, ...rest } = raw;
+	const draft = normalizeRelatedAdrs({ ...emptyForm(), ...rest });
+	const sections: Record<string, string> = { ...(draft.sections ?? {}) };
+
+	if (raw.version !== 2) {
+		for (const field of LEGACY_SECTION_FIELDS) {
+			const body = (raw as unknown as Record<string, unknown>)[field];
+			if (typeof body === "string" && body.trim()) sections[field] = body;
+		}
+	}
+
+	const known = new Set(format.map((section) => sectionKey(section.title)));
+	// The title as the draft knew it. The last resort only capitalises the first letter:
+	// the key is lowercase, so that's all that can be recovered.
+	const headingFor = (key: string): string =>
+		sectionTitles[key] ?? KNOWN_TITLES[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+
+	const kept: Record<string, string> = {};
+	const orphaned = new Map<string, CustomSection>();
+	for (const [key, body] of Object.entries(sections)) {
+		if (known.has(key)) {
+			kept[key] = body;
+		} else if (body.trim()) {
+			orphaned.set(key, { heading: headingFor(key), body, format: "rich" });
+		}
+	}
+
+	// Widget-backed content, moved out the same way when its section left the format.
+	if (!known.has(STATUS_KEY) && draft.status) {
+		orphaned.set(STATUS_KEY, { heading: headingFor(STATUS_KEY), body: draft.status, format: "plain" });
+		draft.status = "";
+	}
+
+	if (!known.has(DECISION_KEY) && (draft.alternatives.length || draft.relatedAdrs.length)) {
+		const parts = [orphaned.get(DECISION_KEY)?.body.trim() ?? ""];
+		if (draft.alternatives.length) {
+			parts.push(["### Alternatives Considered", ...draft.alternatives.map((a) => `- ${a}`)].join("\n"));
+		}
+		if (draft.relatedAdrs.length) {
+			parts.push(["### Related ADRs", ...draft.relatedAdrs.map((source) => `- ${source}`)].join("\n"));
+		}
+		orphaned.set(DECISION_KEY, {
+			heading: headingFor(DECISION_KEY),
+			body: parts.filter(Boolean).join("\n\n"),
+			format: "rich",
+		});
+		draft.alternatives = [];
+		draft.relatedAdrs = [];
+	}
+
+	if (!known.has(CONSEQUENCES_KEY) && (draft.positiveConsequences.trim() || draft.negativeConsequences.trim())) {
+		const parts: string[] = [];
+		if (draft.positiveConsequences.trim()) {
+			parts.push(`### Positive\n${draft.positiveConsequences.trim()}`);
+		}
+		if (draft.negativeConsequences.trim()) {
+			parts.push(`### Trade-offs\n${draft.negativeConsequences.trim()}`);
+		}
+		orphaned.set(CONSEQUENCES_KEY, { heading: headingFor(CONSEQUENCES_KEY), body: parts.join("\n\n"), format: "rich" });
+		draft.positiveConsequences = "";
+		draft.negativeConsequences = "";
+	}
+
+	return {
+		...draft,
+		version: 2,
+		sections: kept,
+		customSections: [...draft.customSections, ...orphaned.values()],
 	};
 }
 
@@ -141,9 +259,55 @@ export function useCreateAdr() {
 	// The semantic (LLM) pass errored server-side (distinct from the whole call failing).
 	const reviewDegraded = ref(false);
 
-	const { validate, simpleValidate, validationErrors } = useZodValidation(adrSchema, {
+	// The format the form is built from. Loaded once on mount: changing it in another tab
+	// doesn't reshape an open form, which would move fields out from under the user.
+	const format = ref<AdrSection[]>([]);
+	const formatLoading = ref(true);
+	const formatError = ref("");
+
+	const sectionsInOrder = computed(() => format.value);
+
+	/** Whether a section counts as filled, which differs for the widget-backed ones. */
+	const sectionFilled = (key: string): boolean => {
+		const f = form.value;
+		if (key === STATUS_KEY) return !!f.status;
+		if (key === CONSEQUENCES_KEY) return !!(f.positiveConsequences.trim() || f.negativeConsequences.trim());
+		return !!(f.sections[key] ?? "").trim();
+	};
+
+	// Built from the format rather than a fixed schema, so a team's own required section
+	// blocks submission the same way Status always has.
+	const schema = computed(() => {
+		const shape: Record<string, z.ZodType> = {
+			title: z.string().trim().min(1, { message: "Title is required." }),
+		};
+		for (const section of format.value) {
+			const key = sectionKey(section.title);
+			shape[fieldKey(key)] = section.required
+				? z.literal(true, { message: `${section.title} is required.` })
+				: z.boolean();
+		}
+		return z.object(shape);
+	});
+
+	// Validation runs over filled/not-filled flags rather than the raw bodies, because
+	// "filled" means something different for Status, Consequences and a plain editor.
+	const validationTarget = computed(() => {
+		const target: Record<string, unknown> = { title: form.value.title };
+		for (const section of format.value) {
+			const key = sectionKey(section.title);
+			target[fieldKey(key)] = sectionFilled(key);
+		}
+		return target;
+	});
+
+	const { validate, simpleValidate, validationErrors, updateSchema } = useZodValidation(schema.value, {
 		errorToast: { summary: "Missing required fields", detail: "Please complete the highlighted fields." },
 	});
+
+	// useZodValidation reads its schema once at setup, and the format arrives after that.
+	// Without this the form would validate against an empty schema and accept anything.
+	watch(schema, (next) => updateSchema(next));
 
 	const statusSeverity = computed(() => statusSeverityMap[form.value.status] ?? "secondary");
 
@@ -166,49 +330,64 @@ export function useCreateAdr() {
 	// Assemble the form into an ADR markdown document, mirroring the docs/adr/ format.
 	// Core sections always render (with a muted placeholder when empty) so the document
 	// structure is visible; optional sections appear only once filled in.
+	// Assembled in format order: required sections always render (with a muted placeholder
+	// when empty) so the document's shape is visible, optional ones only once filled.
+	// Custom sections come last, after every format section.
 	const markdown = computed<string>(() => {
 		const f = form.value;
 		const lines: string[] = [];
 
 		const title = f.title || "Untitled ADR";
 		lines.push(f.id ? `# ${f.id}: ${title}` : `# ${title}`, "");
-		lines.push("## Status", f.status || "_Not set_", "");
-		lines.push("## Scope", f.scope || "_Not set_", "");
-		if (f.context.trim()) {
-			lines.push("## Context", f.context.trim(), "");
-		}
-		lines.push("## Decision", f.decision || "_State the decision clearly._");
 
-		if (f.alternatives.length) {
-			lines.push("", "### Alternatives Considered", ...f.alternatives.map((a) => `- ${a}`));
-		}
-		if (f.relatedAdrs.length) {
-			lines.push("", "### Related ADRs", ...f.relatedAdrs.map((source) => `- ${source}`));
-		}
+		for (const section of format.value) {
+			const key = sectionKey(section.title);
+			const filled = sectionFilled(key);
+			// An optional Decision with no body still carries its alternatives and related
+			// ADRs. Not part of sectionFilled, which also decides whether a required Decision
+			// passes validation, and that needs an actual decision.
+			const hasDecisionExtras = key === DECISION_KEY && (f.alternatives.length > 0 || f.relatedAdrs.length > 0);
+			if (!filled && !hasDecisionExtras && !section.required) continue;
 
-		if (f.implementation.trim()) {
-			lines.push("", "## Implementation", f.implementation.trim());
-		}
+			lines.push(`## ${section.title}`);
 
-		for (const s of f.customSections) {
-			if (!s.heading.trim() && !s.body.trim()) continue;
-			lines.push("", `## ${s.heading.trim() || "Untitled Section"}`, s.body.trim());
-		}
-
-		if (f.positiveConsequences.trim() || f.negativeConsequences.trim()) {
-			lines.push("", "## Consequences");
-			if (f.positiveConsequences.trim()) {
-				lines.push("", "### Positive", f.positiveConsequences.trim());
+			if (key === STATUS_KEY) {
+				lines.push(f.status || "_Not set_", "");
+				continue;
 			}
-			if (f.negativeConsequences.trim()) {
-				lines.push("", "### Trade-offs", f.negativeConsequences.trim());
+			if (key === CONSEQUENCES_KEY) {
+				if (!filled) {
+					lines.push("_Not set_", "");
+					continue;
+				}
+				if (f.positiveConsequences.trim()) lines.push("", "### Positive", f.positiveConsequences.trim());
+				if (f.negativeConsequences.trim()) lines.push("", "### Trade-offs", f.negativeConsequences.trim());
+				lines.push("");
+				continue;
 			}
-		}
-		if (f.notes.trim()) {
-			lines.push("", "## Notes", f.notes.trim());
+
+			const body = (f.sections[key] ?? "").trim();
+			if (key === DECISION_KEY) {
+				lines.push(body || "_State the decision clearly._");
+				if (f.alternatives.length) {
+					lines.push("", "### Alternatives Considered", ...f.alternatives.map((a) => `- ${a}`));
+				}
+				if (f.relatedAdrs.length) {
+					lines.push("", "### Related ADRs", ...f.relatedAdrs.map((source) => `- ${source}`));
+				}
+				lines.push("");
+				continue;
+			}
+
+			lines.push(body || "_Not set_", "");
 		}
 
-		return lines.join("\n");
+		for (const section of f.customSections) {
+			if (!section.heading.trim() && !section.body.trim()) continue;
+			lines.push(`## ${section.heading.trim() || "Untitled Section"}`, section.body.trim(), "");
+		}
+
+		return lines.join("\n").trimEnd();
 	});
 
 	// Track the app's dark mode (PrimeVue toggles a `.app-dark` class) so editors/preview match.
@@ -263,16 +442,52 @@ export function useCreateAdr() {
 
 	// Resume an existing draft when ?draft=<id> is present; otherwise start fresh with
 	// a backend-assigned next id. Snapshot the result as the pristine baseline.
-	onMounted(async () => {
+	// The format decides which fields exist, so the page can't render without it. A
+	// failure shows a retry rather than falling back to built-in defaults: creating an
+	// ADR needs the backend anyway, and a silent fallback would produce the wrong shape.
+	const loadFormat = async (): Promise<void> => {
+		formatLoading.value = true;
+		formatError.value = "";
+		try {
+			const { data } = await settingsService.getAdrFormat();
+			format.value = data.sections;
+			// Seed every section's key so v-model has somewhere to write. Without this the
+			// first keystroke in a never-touched section writes to an undefined property.
+			for (const section of data.sections) {
+				const key = sectionKey(section.title);
+				if (form.value.sections[key] === undefined) form.value.sections[key] = "";
+			}
+		} catch (error) {
+			formatError.value = axios.isAxiosError(error)
+				? (error.response?.data?.detail ?? error.message)
+				: "Couldn't load the ADR format.";
+			throw error;
+		} finally {
+			formatLoading.value = false;
+		}
+	};
+
+	const start = async (): Promise<void> => {
 		// Independent of the form — let it load alongside rather than gating the page on it.
 		void loadRelatedAdrOptions();
+
+		try {
+			await loadFormat();
+		} catch {
+			return; // the page shows the retry; nothing below can run without a format
+		}
 
 		const resumeId = typeof route.query.draft === "string" ? route.query.draft : null;
 		if (resumeId) {
 			try {
 				const { data } = await draftService.getDraft(resumeId);
-				form.value = normalizeRelatedAdrs({ ...emptyForm(), ...data.draft });
+				form.value = resumeIntoFormat(data.draft, format.value);
+				for (const section of format.value) {
+					const key = sectionKey(section.title);
+					if (form.value.sections[key] === undefined) form.value.sections[key] = "";
+				}
 				draftId.value = resumeId;
+				if (!form.value.id) await assignNewId();
 			} catch (error) {
 				console.error("Failed to load draft:", error);
 				toast.add({ severity: "error", summary: "Couldn't load draft", detail: "Starting a new ADR instead.", life: 4000 });
@@ -282,7 +497,11 @@ export function useCreateAdr() {
 			await assignNewId();
 		}
 		markPristine();
-	});
+	};
+
+	const retryFormat = (): void => void start();
+
+	onMounted(start);
 
 	// Warn on browser-level navigation (tab close / refresh) while there are unsaved changes.
 	const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -333,7 +552,7 @@ export function useCreateAdr() {
 	};
 
 	// After the first failed submit, re-validate live so errors clear as fields are fixed.
-	watch(form, () => simpleValidate(form.value), { deep: true });
+	watch(form, () => simpleValidate(validationTarget.value), { deep: true });
 
 	const saveDraft = async (): Promise<boolean> => {
 		// New drafts get a stable id on first save (independent of the ADR id);
@@ -343,7 +562,10 @@ export function useCreateAdr() {
 		}
 		savingDraft.value = true;
 		try {
-			await draftService.saveDraft(draftId.value, form.value);
+			// Record each key's title as the format spells it, so a later rename can bring the
+			// text back under its original heading (see AdrForm.sectionTitles).
+			const sectionTitles = Object.fromEntries(format.value.map((s) => [sectionKey(s.title), s.title]));
+			await draftService.saveDraft(draftId.value, { ...form.value, sectionTitles });
 			markPristine();
 			toast.add({ severity: "success", summary: "Draft saved", life: 2000 });
 			return true;
@@ -377,7 +599,7 @@ export function useCreateAdr() {
 	};
 
 	const submitAdr = async (): Promise<void> => {
-		if (!validate(form.value)) return;
+		if (!validate(validationTarget.value)) return;
 
 		submitting.value = true;
 		try {
@@ -440,6 +662,15 @@ export function useCreateAdr() {
 	return {
 		// state
 		form,
+		format: sectionsInOrder,
+		formatLoading,
+		formatError,
+		retryFormat,
+		sectionKey,
+		fieldKey,
+		STATUS_KEY,
+		DECISION_KEY,
+		CONSEQUENCES_KEY,
 		alternativeInput,
 		submitting,
 		savingDraft,

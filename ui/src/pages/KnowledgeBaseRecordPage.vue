@@ -88,7 +88,18 @@
 						class="mb-4 rounded-xl border border-slate-200 dark:border-surface-700 overflow-hidden"
 					>
 						<header class="flex items-center justify-between bg-slate-50 dark:bg-surface-800/50 px-4 py-2">
-							<span class="font-semibold text-slate-700 dark:text-surface-100">{{ section.heading || "Untitled section" }}</span>
+							<div class="flex items-center gap-2 min-w-0">
+								<span class="font-semibold text-slate-700 dark:text-surface-100">{{ section.heading || "Untitled section" }}</span>
+								<!-- Kept, not flagged as an error: an older ADR predating a format
+								     change is normal, and its text is still the record of a decision. -->
+								<span
+									v-if="format.length && !inFormat(section.heading)"
+									v-tooltip.top="'Not in the current ADR format. It stays in this ADR and is left alone.'"
+									class="shrink-0 text-xs text-slate-500 dark:text-surface-400 border border-slate-300 dark:border-surface-600 rounded px-1.5 py-0.5"
+								>
+									not in format
+								</span>
+							</div>
 							<Button
 								:label="isActive(index) ? 'Done' : 'Edit'"
 								:icon="isActive(index) ? 'pi pi-check' : 'pi pi-pencil'"
@@ -107,7 +118,34 @@
 						</div>
 					</section>
 
-					<p v-if="!doc.sections.length" class="text-sm text-slate-500 dark:text-surface-400">
+					<!-- Format sections this ADR doesn't have. Without these there's no way to
+					     satisfy a newly required section: the review demands the heading and the
+					     page only ever showed headings the document already had. -->
+					<section
+						v-for="missing in missingSections"
+						:key="`missing-${missing.title}`"
+						:id="sectionAnchorId(missing.title)"
+						class="mb-4 rounded-xl border border-dashed border-slate-300 dark:border-surface-600 overflow-hidden"
+					>
+						<header class="flex items-center justify-between bg-slate-50/60 dark:bg-surface-800/30 px-4 py-2">
+							<div class="flex items-center gap-2 min-w-0">
+								<span class="font-semibold text-slate-500 dark:text-surface-300">{{ missing.title }}</span>
+								<span
+									v-if="missing.required"
+									class="shrink-0 text-xs text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5"
+								>
+									required, not in this ADR
+								</span>
+								<span v-else class="shrink-0 text-xs text-slate-400">not in this ADR</span>
+							</div>
+							<Button label="Add" icon="pi pi-plus" text size="small" @click="addSection(missing.title)" />
+						</header>
+						<div class="px-4 py-3 text-sm text-slate-500 dark:text-surface-400">
+							{{ missing.purpose || "Added by the team's ADR format." }}
+						</div>
+					</section>
+
+					<p v-if="!doc.sections.length && !missingSections.length" class="text-sm text-slate-500 dark:text-surface-400">
 						No <code>##</code> sections found in this document — edit the title &amp; intro above, or add sections in the raw markdown.
 					</p>
 				</div>
@@ -197,7 +235,7 @@
 </template>
 
 <script setup lang="ts">
-import { knowledgeBaseService, ReviewFinding, reviewService } from "@/api-service";
+import { type AdrSection as AdrFormatSection, knowledgeBaseService, ReviewFinding, reviewService, settingsService } from "@/api-service";
 import ReviewFindingsDialog from "@/components/dialog/ReviewFindingsDialog.vue";
 import { AdrDocument, AdrSection, joinAdr, sectionAnchorId, splitAdr } from "@/utils/adr-sections";
 import { downloadMarkdown } from "@/utils/download-markdown";
@@ -267,6 +305,58 @@ const saving = ref(false);
 // The ADR split into an editable preamble + section cards. Editing a card mutates only its
 // body; joinAdr reassembles the document byte-for-byte for untouched sections.
 const doc = ref<AdrDocument>({ preamble: "", sections: [] });
+
+// The team's ADR format, so the page can show which sections this ADR is missing. Best
+// effort: a failure leaves the list empty and the page behaves as it did before, since
+// editing an existing ADR shouldn't be blocked by a settings call.
+const format = ref<AdrFormatSection[]>([]);
+
+const headingKey = (heading: string): string => heading.trim().toLowerCase();
+
+const inFormat = (heading: string): boolean =>
+	format.value.some((section) => headingKey(section.title) === headingKey(heading));
+
+const missingSections = computed(() => {
+	const present = new Set(doc.value.sections.map((section) => headingKey(section.heading)));
+	return format.value.filter((section) => !present.has(headingKey(section.title)));
+});
+
+/**
+ * Materialise a format section the ADR doesn't have, in the position the format puts it
+ * relative to the sections already present, rather than appending it. An ADR reads in a
+ * fixed order and a newly required section belongs where the format says, not at the end.
+ */
+const addSection = (title: string): void => {
+	// The placeholder card disappears once the section exists, but only after Vue patches
+	// the DOM — and activate() below mounts a markdown editor, which is slow enough that a
+	// second click can land first. Jumping to the existing section makes this idempotent,
+	// so no amount of clicking produces a duplicate heading.
+	const existing = doc.value.sections.findIndex((section) => headingKey(section.heading) === headingKey(title));
+	if (existing !== -1) {
+		activate(existing);
+		return;
+	}
+
+	const order = format.value.map((section) => headingKey(section.title));
+	const target = order.indexOf(headingKey(title));
+	let insertAt = doc.value.sections.length;
+	for (let i = 0; i < doc.value.sections.length; i++) {
+		const at = order.indexOf(headingKey(doc.value.sections[i].heading));
+		if (at !== -1 && at > target) {
+			insertAt = i;
+			break;
+		}
+	}
+	// Two newlines so joinAdr produces a blank line under the heading, matching how the
+	// splitter sees every other section.
+	doc.value.sections.splice(insertAt, 0, {
+		headingLine: `## ${title}`,
+		heading: title,
+		body: "\n\n",
+		hadNewline: true,
+	});
+	activate(insertAt);
+};
 // Single active editor: one section (or the preamble) is editable at a time. Opening
 // another card, or clicking outside, commits the current edit and closes it.
 const activeCard = ref<number | "preamble" | null>(null);
@@ -382,6 +472,13 @@ watch(recordData, (newData) => {
 });
 
 onMounted(async () => {
+	// Alongside the record rather than before it: the format only decorates the page, so a
+	// settings failure shouldn't stop an ADR being edited.
+	void settingsService
+		.getAdrFormat()
+		.then(({ data }) => (format.value = data.sections))
+		.catch(() => undefined);
+
 	try {
 		const response = await knowledgeBaseService.getAllRecords();
 		records.value = response.data.records.map((r) => r.source);

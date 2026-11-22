@@ -62,14 +62,25 @@ def section_bodies(content: str) -> list[tuple[str, str]]:
     return sections
 
 
+# For a section a team added without saying what it's for.
+GENERIC_PURPOSE = "judge by what its heading says it should contain."
+
+
+def _escape_braces(text: str) -> str:
+    return text.replace("{", "{{").replace("}", "}}")
+
+
 def build_review_prompt(sections: list[SectionSpec]) -> str:
     """Assemble the system prompt from the section catalog. The per-section purpose bullets
     are generated from `sections` so the semantic pass stays specific (that specificity is
     what catches gibberish) while following whatever format the caller supplies.
 
-    NB: the returned string must contain no literal braces — ChatPromptTemplate parses `{}`
-    as input variables. The catalog text has none, so `.join` here is safe."""
-    section_lines = "\n".join(f"  * {s['title']}: {s['purpose']}" for s in sections)
+    NB: ChatPromptTemplate parses `{}` as input variables. Titles and purposes are written
+    by the team (PUT /settings/adr-format) and may contain braces, so they're doubled here
+    to reach the model as literal text."""
+    section_lines = "\n".join(
+        _escape_braces(f"  * {s['title']}: {s['purpose'] or GENERIC_PURPOSE}") for s in sections
+    )
     return f"""You are an ADR (Architecture Decision Record) reviewer. The ADR (markdown) will be \
 used to ground LLM code generation, so flag anything that makes it useless or misleading for that.
 
@@ -184,8 +195,8 @@ async def review_adr(
 ) -> ReviewResponseSchema:
     """
     orchestrator function to run ADR checks, run both deterministic and llm checks by default.
-    `sections` is the ADR format both passes validate against; defaults to DEFAULT_SECTIONS
-    until per-KB format config is wired in, at which point the caller supplies its catalog.
+    `sections` is the ADR format both passes validate against. The review endpoint passes
+    the team's saved format (settings_service.adr_format()); DEFAULT_SECTIONS is the default.
     """
     results: list[ReviewResultSchema] = []
     llm_ok = True
